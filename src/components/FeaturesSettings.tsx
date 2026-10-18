@@ -1,7 +1,18 @@
 import { Toggle } from '@/components/Toggle';
-import { CAPTION_LANGUAGES, QUALITY_LEVELS } from '@/shared/constants';
+import {
+  CAPTION_LANGUAGES,
+  LIVE_CUSHION_MAX_SECONDS,
+  LIVE_CUSHION_MIN_SECONDS,
+  LIVE_CUSHION_STEP_SECONDS,
+  QUALITY_LEVELS
+} from '@/shared/constants';
 import { languageDisplayName, t } from '@/shared/i18n';
 import type { DeepPartial, QualityValue, Settings } from '@/shared/types';
+
+/** 5 -> "5", 3.5 -> "3.5" (the i18n message supplies the unit). */
+function formatCushionSeconds(value: number): string {
+  return Number.isInteger(value) ? String(value) : value.toFixed(1);
+}
 
 interface FeaturesSettingsProps {
   settings: Settings;
@@ -81,6 +92,28 @@ export function FeaturesSettings({ settings, onChange, showDebug = false }: Feat
           onChange={(enabled) => onChange({ liveDelay: { enabled } })}
           label={t('liveDelayToggle')}
         />
+        <div className="row">
+          <label htmlFor="live-delay-cushion">{t('liveDelayCushionLabel')}</label>
+          <div className="range">
+            <input
+              id="live-delay-cushion"
+              type="range"
+              min={LIVE_CUSHION_MIN_SECONDS}
+              max={LIVE_CUSHION_MAX_SECONDS}
+              step={LIVE_CUSHION_STEP_SECONDS}
+              disabled={!settings.liveDelay.enabled}
+              value={settings.liveDelay.cushionSeconds}
+              onChange={(event) =>
+                onChange({ liveDelay: { cushionSeconds: Number(event.target.value) } })
+              }
+            />
+            <output htmlFor="live-delay-cushion">
+              {t('liveDelayCushionValue', [
+                formatCushionSeconds(settings.liveDelay.cushionSeconds)
+              ])}
+            </output>
+          </div>
+        </div>
         <p className="hint">{t('liveDelayHint')}</p>
       </section>
 

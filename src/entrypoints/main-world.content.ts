@@ -22,30 +22,19 @@
 
 import { defineContentScript } from 'wxt/utils/define-content-script';
 import {
-  LIVE_AUTO_COOLDOWN_TICKS,
-  LIVE_AUTO_CREEP_S_PER_TICK,
-  LIVE_AUTO_TARGET_MAX_S,
-  LIVE_AUTO_TARGET_MIN_S,
-  LIVE_AUTO_TARGET_START_S,
-  LIVE_BRAKE_DRIFT_CEIL_S,
-  LIVE_BRAKE_DRIFT_SPAN_S,
-  LIVE_BRAKE_FLOOR_RATE,
-  LIVE_BRAKE_GAIN,
-  LIVE_BRAKE_START_S,
-  LIVE_BUFFER_BACKOFF_S,
-  LIVE_BUFFER_RAMP_S,
-  LIVE_BUFFER_RESUME_S,
-  LIVE_BUFFER_STALL_FLOOR_S,
   LIVE_CATCH_UP_RATE,
+  LIVE_CUSHION_DEFAULT_SECONDS,
+  LIVE_CUSHION_MAX_SECONDS,
+  LIVE_CUSHION_MIN_SECONDS,
   LIVE_DELAY_IDLE_INTERVAL_MS,
   LIVE_DELAY_PUBLISH_MS,
   LIVE_DELAY_TICK_MIN_MS,
-  LIVE_DRAIN_BRAKE_STEP_S,
-  LIVE_ENGAGE_BAND_S,
-  LIVE_LATENCY_FULL_S,
-  LIVE_MIN_LATENCY_S,
-  LIVE_NEAR_STALL_S,
+  LIVE_DRIFT_CEIL_S,
+  LIVE_DRIFT_SPAN_S,
   LIVE_RATE_STEP,
+  LIVE_REBUILD_FLOOR_RATE,
+  LIVE_REGULATE_GAIN_DOWN,
+  LIVE_REGULATE_GAIN_UP,
   LIVE_SKIP_REARM_S,
   LIVE_SKIP_TO_LIVE_S
 } from '@/shared/constants';
@@ -83,18 +72,6 @@ const PLAYER_STATE_PLAYING = 1;
 interface LiveEngineState {
   /** Smoothed buffer health (null until the first tick). */
   bufferEma: number | null;
-  /** Previous raw buffer health, for the trend. */
-  lastBuffer: number | null;
-  /** Smoothed buffer trend per tick (negative while draining). */
-  drainEma: number;
-  /** Catch-up hysteresis: true while surplus buffer may be spent. */
-  engaged: boolean;
-  /** True after a dip below the backoff line until the buffer recovers. */
-  backoff: boolean;
-  /** Adaptive cushion target, in seconds (see adjustAdaptiveTarget). */
-  target: number;
-  /** Ticks left before the cushion may creep back down. */
-  targetCooldown: number;
   /** True after the jump-to-live backstop fired, until the latency recovers. */
   skipped: boolean;
   /** Rate we last wrote or adopted (1 = normal). */
@@ -368,18 +345,19 @@ export default defineContentScript({
     // -----------------------------------------------------------------------
 
     /**
-     * Keeps live playback close to the live edge with a buffer-regulation
-     * control loop (the approach the ZeroDelay extension validated on real
-     * streams):
+     * Keeps live playback at the cushion the user picked in the settings, with
+     * a buffer-regulation loop (the approach the ZeroDelay extension validated
+     * on real streams):
      *  - the control signal is `buffer_health_seconds` — the media already
      *    downloaded ahead of the playhead, the part playback speed can spend.
      *    `seekableEnd − current` stays near zero even 20s+ behind live, so it
      *    is never used to steer;
-     *  - playback speeds up proportionally to latency demand × surplus buffer
-     *    above an adaptive cushion (up to LIVE_CATCH_UP_RATE), rests at 1x —
-     *    which holds the latency — and dips to 0.95x to rebuild a thin cushion;
+     *  - a buffer surplus above the cushion is spent by speeding playback up
+     *    (up to LIVE_CATCH_UP_RATE); a deficit is rebuilt by dipping slightly
+     *    below 1x (down to LIVE_REBUILD_FLOOR_RATE), which grows the latency
+     *    ceiling so the cushion can refill;
      *  - a jump-to-live backstop (LIVE_SKIP_TO_LIVE_S) covers huge backlogs
-     *    (a long pause) that acceleration could not close.
+     *    (a long pause) that regulation could not close at a reasonable pace.
      * VODs, paused playback and ads are never touched, and a manual speed
      * change from the user is respected until they return to 1x. Every tick
      * also publishes `live-status` (throttled) so the isolated world can draw
@@ -429,7 +407,7 @@ export default defineContentScript({
       maybeSkipToLive(player, latency);
 
       const rateBefore = liveEngine.appliedRate;
-      applyLiveRate(player, liveCatchUpRate(latency, buffer));
+      applyLiveRate(player, liveCatchUpRate(latency, buffer, readCushionSeconds()));
       logRateTransition(rateBefore, latency, buffer);
     }
 
@@ -451,91 +429,34 @@ export default defineContentScript({
     }
 
     /**
-     * Buffer-regulation loop (mirrors the reference controller): returns the
-     * playback rate to hold this tick — 1 at rest, up to LIVE_CATCH_UP_RATE
-     * while spending surplus buffer, down to LIVE_BRAKE_FLOOR_RATE while
-     * rebuilding a thin one.
+     * Buffer-regulation loop (mirrors the reference controller's custom mode):
+     * holds the buffer near the cushion — a surplus above it is spent by
+     * playing a touch faster (up to LIVE_CATCH_UP_RATE), a deficit below it is
+     * rebuilt by playing a touch slower (down to LIVE_REBUILD_FLOOR_RATE,
+     * eased out as the latency climbs toward the drift ceiling so a weak link
+     * cannot keep us slow forever).
      */
-    function liveCatchUpRate(latency: number, health: number): number {
+    function liveCatchUpRate(latency: number, health: number, cushion: number): number {
       const engine = liveEngine;
       engine.bufferEma =
         engine.bufferEma === null ? health : engine.bufferEma * 0.9 + health * 0.1;
-      if (engine.lastBuffer !== null) {
-        engine.drainEma = engine.drainEma * 0.8 + (health - engine.lastBuffer) * 0.2;
+      const excess = engine.bufferEma - cushion;
+
+      if (excess >= 0) {
+        return 1 + Math.min(LIVE_REGULATE_GAIN_UP * excess, LIVE_CATCH_UP_RATE - 1);
       }
-      engine.lastBuffer = health;
-
-      // The cushion adapts to the connection (the loop the reference calls
-      // "automatic"): a near-stall raises it by one second; calm streaming
-      // creeps it back down. Runs first so the target keeps adapting even
-      // while the early rests below return.
-      const target = adjustAdaptiveTarget(health);
-
-      if (latency < LIVE_MIN_LATENCY_S) return restOrBrake(latency);
-      if (health < LIVE_BUFFER_STALL_FLOOR_S) return restOrBrake(latency);
-
-      // Instantaneous backoff: a raw dip cuts acceleration now and it stays
-      // cut until the buffer recovers (no EMA, no taper) — this protects the
-      // descent phase, where a trough is how late segments become stalls.
-      if (health <= LIVE_BUFFER_BACKOFF_S) engine.backoff = true;
-      else if (health >= LIVE_BUFFER_RESUME_S) engine.backoff = false;
-      if (engine.backoff) return restOrBrake(latency);
-
-      // A real drop must bite at once: never let a stale average hide it.
-      const bufferNow = Math.min(health, engine.bufferEma);
-
-      // Don't push against a connection that is already losing ground.
-      if (engine.drainEma < LIVE_DRAIN_BRAKE_STEP_S) return restOrBrake(latency);
-
-      // Hysteresis: engage only comfortably above the cushion (arming on the
-      // smoothed value so a spike cannot re-arm a parked engine into sawtooth
-      // cycling), and disengage the moment the buffer touches the cushion.
-      if (engine.engaged) {
-        if (bufferNow <= target) engine.engaged = false;
-      } else if (engine.bufferEma > target + LIVE_ENGAGE_BAND_S) {
-        engine.engaged = true;
-      }
-      if (!engine.engaged) return restOrBrake(latency);
-
-      const demand = clamp01((latency - LIVE_MIN_LATENCY_S) / LIVE_LATENCY_FULL_S);
-      const headroom = clamp01((bufferNow - target) / LIVE_BUFFER_RAMP_S);
-      return 1 + (LIVE_CATCH_UP_RATE - 1) * demand * headroom;
-    }
-
-    /** Adaptive cushion: near-stall raises it (capped); comfort creeps it down. */
-    function adjustAdaptiveTarget(health: number): number {
-      const engine = liveEngine;
-      if (health < LIVE_NEAR_STALL_S) {
-        engine.target = Math.min(LIVE_AUTO_TARGET_MAX_S, engine.target + 1);
-        engine.targetCooldown = LIVE_AUTO_COOLDOWN_TICKS;
-      } else if (engine.targetCooldown > 0) {
-        engine.targetCooldown -= 1;
-      } else if (engine.bufferEma !== null && engine.bufferEma > engine.target + 2) {
-        engine.target = Math.max(
-          LIVE_AUTO_TARGET_MIN_S,
-          engine.target - LIVE_AUTO_CREEP_S_PER_TICK
-        );
-      }
-      return engine.target;
-    }
-
-    /**
-     * Rest at 1x — or dip to 0.95x to rebuild a thin, still-draining cushion.
-     * Deliberately timid: it fires only on a sustained drain, never goes below
-     * LIVE_BRAKE_FLOOR_RATE, and fades out as latency climbs toward the drift
-     * ceiling (the jump-to-live backstop is the failsafe).
-     */
-    function restOrBrake(latency: number): number {
-      const bufferEma = liveEngine.bufferEma;
-      if (bufferEma === null || bufferEma >= LIVE_BRAKE_START_S || liveEngine.drainEma >= 0) {
-        return 1;
-      }
-      const budget = clamp01((LIVE_BRAKE_DRIFT_CEIL_S - latency) / LIVE_BRAKE_DRIFT_SPAN_S);
-      const slowdown = Math.min(
-        LIVE_BRAKE_GAIN * (LIVE_BRAKE_START_S - bufferEma),
-        1 - LIVE_BRAKE_FLOOR_RATE
-      );
+      const budget = clamp01((LIVE_DRIFT_CEIL_S - latency) / LIVE_DRIFT_SPAN_S);
+      const slowdown = Math.min(LIVE_REGULATE_GAIN_DOWN * -excess, 1 - LIVE_REBUILD_FLOOR_RATE);
       return 1 - slowdown * budget;
+    }
+
+    /** Cushion chosen in the settings, clamped to the slider bounds. */
+    function readCushionSeconds(): number {
+      const value = settings?.liveDelay?.cushionSeconds;
+      if (typeof value !== 'number' || !Number.isFinite(value)) {
+        return LIVE_CUSHION_DEFAULT_SECONDS;
+      }
+      return Math.min(LIVE_CUSHION_MAX_SECONDS, Math.max(LIVE_CUSHION_MIN_SECONDS, value));
     }
 
     /**
@@ -650,12 +571,6 @@ export default defineContentScript({
     function createLiveEngine(): LiveEngineState {
       return {
         bufferEma: null,
-        lastBuffer: null,
-        drainEma: 0,
-        engaged: false,
-        backoff: false,
-        target: LIVE_AUTO_TARGET_START_S,
-        targetCooldown: 0,
         skipped: false,
         appliedRate: 1,
         rateYielded: false
@@ -669,12 +584,6 @@ export default defineContentScript({
      */
     function resetLiveControl(engine: LiveEngineState): void {
       engine.bufferEma = null;
-      engine.lastBuffer = null;
-      engine.drainEma = 0;
-      engine.engaged = false;
-      engine.backoff = false;
-      engine.target = LIVE_AUTO_TARGET_START_S;
-      engine.targetCooldown = 0;
       engine.skipped = false;
     }
 

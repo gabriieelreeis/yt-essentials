@@ -10,14 +10,14 @@ Extensão do Chrome (Manifest V3) que adiciona cinco recursos ao YouTube:
   priorizando a faixa gerada automaticamente (ASR) e caindo para tradução quando
   necessário.
 - **Reduzir o delay de lives** — mantém a transmissão ao vivo o mais perto
-  possível da borda *do player*, com um colchão de segurança **automático** que
-  se adapta à sua conexão (sem opção para configurar). Quando o atraso cresce, a
-  reprodução acelera sozinha (bursts de até 1.5x) só o suficiente para consumir
-  o buffer excedente, descansa em 1x e volta a 0.95x para reconstruir um colchão
-  fino; se ficar mais de 30 segundos atrás (pausa longa), salta direto para a
-  borda ao vivo. Um indicador no player mostra a latência e o buffer atual
-  (visível também em tela cheia). Só age em lives, e só enquanto o vídeo está
-  rodando.
+  possível da borda *do player*, com um **colchão de segurança escolhido por
+  você** (slider de 1 a 10 segundos: menos buffer fica mais perto do ao vivo,
+  mas exige uma conexão melhor). A reprodução acelera sozinha (até 1.5x) só o
+  suficiente para consumir o buffer que passa do colchão e desce a 0.90x para
+  recompor quando falta; se ficar mais de 30 segundos atrás (pausa longa),
+  salta direto para a borda ao vivo. Um indicador no player mostra a latência e
+  o buffer atual (visível também em tela cheia). Só age em lives, e só enquanto
+  o vídeo está rodando.
 - **Pular vídeos já assistidos** — ao reabrir um vídeo que você já assistiu
   (≥ 90%), surge um botão **Próximo vídeo** (*Next video* em inglês) no canto
   inferior esquerdo da página (por cima de todo o conteúdo) que avança para o
@@ -56,8 +56,8 @@ Para carregar manualmente: `chrome://extensions` → **Modo do desenvolvedor** �
 ## Uso
 
 - **Popup** (ícone da extensão): ligar/desligar as funcionalidades configuráveis
-  e escolher resolução e idioma das legendas. Alterações aplicam na hora, sem
-  recarregar a página do YouTube.
+  e escolher resolução, idioma das legendas e o buffer das lives (1–10 s).
+  Alterações aplicam na hora, sem recarregar a página do YouTube.
 - **Página de opções** (botão `Configurações & assistidos` no popup): as mesmas
   configurações, log de depuração e o histórico de vídeos assistidos.
 - **Idiomas**: a interface segue o idioma do navegador — português (Brasil),
@@ -91,4 +91,5 @@ qualquer coisa.**
   quebrar eventualmente).
 - A lógica de redução do delay das lives foi inspirada no projeto
   [ZeroDelay](https://github.com/joaogfc/ZeroDelay) (joaogfc), referência
-  validada em transmissões reais.
+  validada em transmissões reais (inclusive a regulação do colchão
+  personalizado).

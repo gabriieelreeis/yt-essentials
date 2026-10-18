@@ -19,8 +19,15 @@
     "message": "Usa la pista generada automáticamente en ese idioma si existe; si no, subtítulos humanos o una pista traducida."
   },
   "liveDelayToggle": { "message": "Reducir el retraso de los directos" },
+  "liveDelayCushionLabel": { "message": "Búfer objetivo" },
+  "liveDelayCushionValue": {
+    "message": "$seconds$s",
+    "placeholders": {
+      "seconds": { "content": "$1" }
+    }
+  },
   "liveDelayHint": {
-    "message": "Solo afecta a los directos mientras se reproducen: la reproducción se mantiene cerca de la señal en vivo automáticamente, acelerando solo lo necesario, con un margen de seguridad que se adapta a tu conexión. Si se retrasa más de 30 segundos, salta directamente a la señal en vivo."
+    "message": "Solo afecta a los directos mientras se reproducen: la reproducción se mantiene en el búfer objetivo, acelerando solo el excedente y frenando un poco para rehacer el colchón. Menos búfer = más cerca del directo, pero exige mejor conexión. Si se retrasa más de 30 segundos, salta directamente a la señal en vivo."
   },
   "skipToggle": { "message": "Botón de vídeo siguiente" },
   "skipAutoToggle": { "message": "Saltar automáticamente" },

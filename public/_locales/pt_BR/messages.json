@@ -19,8 +19,15 @@
     "message": "Usa a faixa automática nesse idioma quando existir; caso contrário, legendas humanas ou uma faixa traduzida."
   },
   "liveDelayToggle": { "message": "Reduzir o delay de lives" },
+  "liveDelayCushionLabel": { "message": "Buffer alvo" },
+  "liveDelayCushionValue": {
+    "message": "$seconds$s",
+    "placeholders": {
+      "seconds": { "content": "$1" }
+    }
+  },
   "liveDelayHint": {
-    "message": "Age só em lives enquanto estão rodando: a reprodução é mantida perto da borda ao vivo automaticamente, acelerando só o necessário, com uma folga de segurança que se adapta à sua conexão. Se ficar mais de 30 segundos atrás, pula direto para a borda ao vivo."
+    "message": "Age só em lives enquanto estão rodando: a reprodução fica no buffer alvo, acelerando só o excedente e desacelerando de leve para recompor o colchão. Menos buffer = mais perto do ao vivo, mas exige uma conexão melhor. Se ficar mais de 30 segundos atrás, pula direto para a borda ao vivo."
   },
   "skipToggle": { "message": "Botão de próximo vídeo" },
   "skipAutoToggle": { "message": "Pular automaticamente" },

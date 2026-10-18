@@ -103,8 +103,8 @@ export interface PlayerSettings {
   debug?: boolean;
   quality?: { enabled: boolean; value: string };
   captions?: { enabled: boolean; language: string };
-  /** Live-delay toggle; the safety cushion is chosen automatically. */
-  liveDelay?: { enabled: boolean };
+  /** Live-delay toggle and the cushion the user picked (seconds behind live). */
+  liveDelay?: { enabled: boolean; cushionSeconds: number };
 }
 
 export function getPlayerElement(): YouTubePlayerElement | null {

@@ -48,12 +48,13 @@ export interface CaptionsSettings {
 }
 
 export interface LiveDelaySettings {
-  /**
-   * Keeps live playback close to the live edge (live streams only). The
-   * safety cushion is chosen automatically by the engine (adaptive); there is
-   * no user-facing buffer option.
-   */
+  /** Keeps live playback close to the live edge (live streams only). */
   enabled: boolean;
+  /**
+   * Safety cushion in seconds: how far behind the live edge playback parks.
+   * Smaller = closer to live but needs a better connection (1–10 s, 0.5 step).
+   */
+  cushionSeconds: number;
 }
 
 export interface SkipSettings {

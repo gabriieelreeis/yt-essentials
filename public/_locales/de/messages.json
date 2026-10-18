@@ -19,8 +19,15 @@
     "message": "Nutzt die automatisch erzeugte Spur dieser Sprache, wenn vorhanden; sonst manuelle Untertitel oder eine übersetzte Spur."
   },
   "liveDelayToggle": { "message": "Live-Verzögerung reduzieren" },
+  "liveDelayCushionLabel": { "message": "Zielpuffer" },
+  "liveDelayCushionValue": {
+    "message": "$seconds$s",
+    "placeholders": {
+      "seconds": { "content": "$1" }
+    }
+  },
   "liveDelayHint": {
-    "message": "Wirkt nur auf Livestreams während der Wiedergabe: Die Wiedergabe wird automatisch nahe am Live-Rand gehalten, beschleunigt nur so weit wie nötig und passt den Sicherheitspuffer an deine Verbindung an. Gerät sie mehr als 30 Sekunden zurück, springt sie direkt an den Live-Rand."
+    "message": "Wirkt nur auf Livestreams während der Wiedergabe: Die Wiedergabe bleibt am Zielpuffer, beschleunigt nur den Überschuss und verlangsamt leicht, um den Puffer wieder aufzubauen. Weniger Puffer = näher am Live-Rand, erfordert aber eine bessere Verbindung. Gerät sie mehr als 30 Sekunden zurück, springt sie direkt an den Live-Rand."
   },
   "skipToggle": { "message": "Schaltfläche „Nächstes Video“" },
   "skipAutoToggle": { "message": "Automatisch überspringen" },

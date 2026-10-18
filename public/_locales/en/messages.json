@@ -19,8 +19,15 @@
     "message": "Uses the auto-generated track of that language when available, falling back to human captions or a translated track."
   },
   "liveDelayToggle": { "message": "Reduce live delay" },
+  "liveDelayCushionLabel": { "message": "Target buffer" },
+  "liveDelayCushionValue": {
+    "message": "$seconds$s",
+    "placeholders": {
+      "seconds": { "content": "$1" }
+    }
+  },
   "liveDelayHint": {
-    "message": "Works on live streams while they are playing: playback is automatically kept near the live edge, speeding up only as much as needed, with a safety cushion that adapts to your connection. If it ever falls more than 30 seconds behind, it jumps straight to the live edge."
+    "message": "Works on live streams while they are playing: playback is held at the target buffer, speeding up only the surplus and slowing down a touch to rebuild the cushion. Less buffer = closer to live, but needs a better connection. If it ever falls more than 30 seconds behind, it jumps straight to the live edge."
   },
   "skipToggle": { "message": "Next video button" },
   "skipAutoToggle": { "message": "Skip automatically" },
