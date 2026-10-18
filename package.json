@@ -1,0 +1,26 @@
+{
+  "name": "yt-essentials",
+  "description": "Save watched videos, force resolution, auto-enable captions and skip videos you already watched on YouTube.",
+  "private": true,
+  "version": "0.5.0",
+  "type": "module",
+  "scripts": {
+    "dev": "wxt --browser chrome",
+    "build": "wxt build --browser chrome",
+    "zip": "wxt zip --browser chrome",
+    "compile": "tsc --noEmit",
+    "postinstall": "wxt prepare"
+  },
+  "dependencies": {
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1"
+  },
+  "devDependencies": {
+    "@types/chrome": "^0.3.5",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@wxt-dev/module-react": "^1.2.2",
+    "typescript": "^7.0.2",
+    "wxt": "^0.21.4"
+  }
+}
