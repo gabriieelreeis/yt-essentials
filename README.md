@@ -16,10 +16,11 @@ Extensão do Chrome (Manifest V3) que adiciona cinco recursos ao YouTube:
   indicador no player mostra o buffer e o tempo atrás da borda (visível também
   em tela cheia). Só age em lives, e só enquanto o vídeo está rodando.
 - **Pular vídeos já assistidos** — ao reabrir um vídeo que você já assistiu
-  (≥ 90%), surge um botão **Next video** no canto inferior esquerdo da página
-  (por cima de todo o conteúdo) que avança para o próximo vídeo (playlist ou
-  autoplay). Nunca aparece em lives nem em Shorts. Pode ser desligado no popup,
-  e com a sub-opção **Skip automatically** a extensão pula sozinha.
+  (≥ 90%), surge um botão **Próximo vídeo** (*Next video* em inglês) no canto
+  inferior esquerdo da página (por cima de todo o conteúdo) que avança para o
+  próximo vídeo (playlist ou autoplay). Nunca aparece em lives nem em Shorts.
+  Pode ser desligado no popup, e com a sub-opção **Pular automaticamente**
+  (*Skip automatically*) a extensão pula sozinha.
 
 ## Stack
 
@@ -54,8 +55,10 @@ Para carregar manualmente: `chrome://extensions` → **Modo do desenvolvedor** �
 - **Popup** (ícone da extensão): ligar/desligar as funcionalidades configuráveis
   e escolher resolução, idioma das legendas e o buffer das lives. Alterações
   aplicam na hora, sem recarregar a página do YouTube.
-- **Página de opções** (botão `Settings & watched list` no popup): as mesmas
+- **Página de opções** (botão `Configurações & assistidos` no popup): as mesmas
   configurações, log de depuração e o histórico de vídeos assistidos.
+- **Idiomas**: a interface segue o idioma do navegador — português (Brasil),
+  inglês, espanhol, russo e alemão. Qualquer outro idioma usa o inglês.
 
 ## Estrutura
 
@@ -63,6 +66,7 @@ Para carregar manualmente: `chrome://extensions` → **Modo do desenvolvedor** �
 wxt.config.ts          # configuração do WXT (manifest, srcDir, módulo React)
 tsconfig.json          # TypeScript (extends do tsconfig gerado pelo WXT)
 public/icons/          # Ícones (regerar com tools/make-icons.ps1)
+public/_locales/       # Traduções da UI (en, pt_BR, es, ru, de)
 src/entrypoints/       # content scripts (isolated + MAIN world), popup e options
 src/shared/            # tipos, constantes, storage, helpers do player
 src/components/        # componentes React compartilhados

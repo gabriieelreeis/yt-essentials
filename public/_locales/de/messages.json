@@ -1,0 +1,123 @@
+{
+  "extDescription": {
+    "message": "Speichert gesehene Videos, erzwingt die Auflösung, aktiviert Untertitel, reduziert die Verzögerung von Livestreams und überspringt bereits gesehene Videos auf YouTube."
+  },
+  "watchedToggle": { "message": "Gesehene Videos speichern" },
+  "watchedHint": {
+    "message": "Speichert Titel, Kanal, Sehzeit, Dauer, Prozentsatz und Datum für jedes gesehene Video. Alles bleibt in diesem Browser."
+  },
+  "qualityToggle": { "message": "Videoauflösung erzwingen" },
+  "qualityLabel": { "message": "Auflösung" },
+  "qualityAuto": { "message": "Automatisch" },
+  "qualityHighest": { "message": "Höchste verfügbare" },
+  "qualityHint": {
+    "message": "Wenn das Video die gewählte Qualität nicht anbietet, wird die beste Qualität darunter verwendet."
+  },
+  "captionsToggle": { "message": "Untertitel aktivieren" },
+  "captionsLabel": { "message": "Sprache" },
+  "captionsHint": {
+    "message": "Nutzt die automatisch erzeugte Spur dieser Sprache, wenn vorhanden; sonst manuelle Untertitel oder eine übersetzte Spur."
+  },
+  "liveDelayToggle": { "message": "Live-Verzögerung reduzieren" },
+  "liveDelayBufferLabel": { "message": "Puffer" },
+  "liveDelayHintIntro": {
+    "message": "Wirkt nur auf Livestreams während der Wiedergabe: Gerät die Wiedergabe mehr als den gewählten Puffer hinter den Live-Rand, beschleunigt sie von selbst, bis sie wieder am Ziel ist."
+  },
+  "liveDelayRealTime": { "message": "Echtzeit" },
+  "liveDelayRealTimeHint": {
+    "message": "Bleibt direkt am Live-Rand. Nur bei schneller und sehr stabiler Verbindung wählen, bei der ein Aussetzer zu einer sichtbaren Pause würde."
+  },
+  "liveDelay2s": { "message": "2 Sekunden" },
+  "liveDelay2sHint": {
+    "message": "Kleiner Puffer: fängt kurze Aussetzer bei schnellen Verbindungen ab; die Verzögerung bleibt kaum wahrnehmbar."
+  },
+  "liveDelay5s": { "message": "5 Sekunden" },
+  "liveDelay5sHint": {
+    "message": "Ausgeglichener Puffer für durchschnittliche Verbindungen: flüssigere Wiedergabe mit einer Verzögerung deutlich unter dem üblichen YouTube-Wert."
+  },
+  "liveDelay10s": { "message": "10 Sekunden" },
+  "liveDelay10sHint": {
+    "message": "Zusätzlicher Puffer für langsame oder instabile Verbindungen: geringste Ruckelgefahr, aber die größte Verzögerung aller Optionen."
+  },
+  "skipToggle": { "message": "Schaltfläche „Nächstes Video“" },
+  "skipAutoToggle": { "message": "Automatisch überspringen" },
+  "skipHint": {
+    "message": "Zeigt bei bereits gesehenen Videos (90 % oder mehr) eine Schaltfläche über der Seite, die zum nächsten Video springt. Mit automatischem Überspringen springt sie von selbst. Gilt nie für Livestreams."
+  },
+  "debugToggle": { "message": "Debug-Protokoll" },
+  "debugHint": {
+    "message": "Gibt zusätzliche Informationen in der Browser-Konsole aus. Hilfreich, wenn etwas nicht funktioniert."
+  },
+  "optionsSubtitle": { "message": "Einstellungen und Verlauf gesehener Videos" },
+  "toastSettingsSaved": { "message": "Einstellungen gespeichert" },
+  "toastVideoRemoved": { "message": "Video entfernt" },
+  "confirmClear": {
+    "message": "Den gesamten Verlauf gesehener Videos löschen (insgesamt: $count$)? Das kann nicht rückgängig gemacht werden.",
+    "placeholders": {
+      "count": { "content": "$1" }
+    }
+  },
+  "toastHistoryCleared": { "message": "Verlauf gelöscht" },
+  "toastExportDownloaded": { "message": "Export heruntergeladen" },
+  "watchedVideosTitle": { "message": "Gesehene Videos" },
+  "videosSearchPlaceholder": { "message": "Nach Titel oder Kanal suchen" },
+  "exportJsonButton": { "message": "JSON exportieren" },
+  "clearAllButton": { "message": "Alles löschen" },
+  "emptyWatched": {
+    "message": "Noch keine Videos aufgezeichnet. Schau auf YouTube etwas an und komm wieder."
+  },
+  "emptySearch": { "message": "Keine Videos entsprechen deiner Suche." },
+  "loadMoreButton": { "message": "Mehr laden" },
+  "optionsTitle": { "message": "YT Essentials - Einstellungen" },
+  "videoUnknownChannel": { "message": "Unbekannter Kanal" },
+  "videoStats": {
+    "message": "$watched$ von $duration$ ($percent$%) - gesehen $when$",
+    "placeholders": {
+      "watched": { "content": "$1" },
+      "duration": { "content": "$2" },
+      "percent": { "content": "$3" },
+      "when": { "content": "$4" }
+    }
+  },
+  "videoPlayCount": {
+    "message": "Wiedergaben: $count$",
+    "placeholders": {
+      "count": { "content": "$1" }
+    }
+  },
+  "removeButton": { "message": "Entfernen" },
+  "removeTitle": { "message": "Aus dem Verlauf entfernen" },
+  "openOptionsButton": { "message": "Einstellungen & Verlauf" },
+  "savedBadge": { "message": "Gespeichert" },
+  "skipButton": { "message": "Nächstes Video" },
+  "skipTooltip": {
+    "message": "Du hast dieses Video bereits gesehen ($percent$%)",
+    "placeholders": {
+      "percent": { "content": "$1" }
+    }
+  },
+  "staleNotice": {
+    "message": "YT Essentials wurde aktualisiert - lade die Seite neu, damit es weiter funktioniert."
+  },
+  "liveBadgeBehind": {
+    "message": "$delay$s hinter live (Puffer $buffer$s)",
+    "placeholders": {
+      "delay": { "content": "$1" },
+      "buffer": { "content": "$2" }
+    }
+  },
+  "liveBadgeBehindRealTime": {
+    "message": "$delay$s hinter live (Echtzeit)",
+    "placeholders": {
+      "delay": { "content": "$1" }
+    }
+  },
+  "liveBadgeUnmeasured": {
+    "message": "live (Puffer $buffer$s)",
+    "placeholders": {
+      "buffer": { "content": "$1" }
+    }
+  },
+  "liveBadgeUnmeasuredRealTime": { "message": "live (Echtzeit)" },
+  "timeJustNow": { "message": "gerade eben" }
+}

@@ -60,7 +60,7 @@ export const QUALITY_LEVELS: readonly QualityLevelOption[] = [
   { value: 'hd2160', label: '2160p (4K)' },
   { value: 'hd2880', label: '2880p (5K)' },
   { value: 'hd4320', label: '4320p (8K)' },
-  { value: 'highres', label: 'Highest available' }
+  { value: 'highres', label: 'Highest available', labelKey: 'qualityHighest' }
 ];
 
 /** Caption languages offered in the UI (YouTube/BCP-47 codes). */
@@ -105,27 +105,27 @@ export const CAPTION_LANGUAGES: readonly CaptionLanguageOption[] = [
 export const LIVE_DELAY_OPTIONS: readonly LiveDelayOption[] = [
   {
     value: 'real-time',
-    label: 'Real time',
+    labelKey: 'liveDelayRealTime',
     seconds: 0,
-    hint: 'Stays glued to the live edge. Pick it only with a fast and very stable connection, where a hiccup would become a visible pause.'
+    hintKey: 'liveDelayRealTimeHint'
   },
   {
     value: '2s',
-    label: '2 seconds',
+    labelKey: 'liveDelay2s',
     seconds: 2,
-    hint: 'Tiny cushion: absorbs short hiccups on fast connections while the delay stays almost imperceptible.'
+    hintKey: 'liveDelay2sHint'
   },
   {
     value: '5s',
-    label: '5 seconds',
+    labelKey: 'liveDelay5s',
     seconds: 5,
-    hint: 'Balanced cushion for average connections: smoother playback, with a delay still clearly below YouTube\'s usual drift.'
+    hintKey: 'liveDelay5sHint'
   },
   {
     value: '10s',
-    label: '10 seconds',
+    labelKey: 'liveDelay10s',
     seconds: 10,
-    hint: 'Extra cushion for slow or unstable connections: the lowest chance of stutter, with the largest delay of the options.'
+    hintKey: 'liveDelay10sHint'
   }
 ];
 

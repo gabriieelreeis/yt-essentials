@@ -1,0 +1,123 @@
+{
+  "extDescription": {
+    "message": "Salva vídeos assistidos, força a resolução, liga legendas automaticamente, reduz o delay de lives e pula vídeos que você já assistiu no YouTube."
+  },
+  "watchedToggle": { "message": "Salvar vídeos assistidos" },
+  "watchedHint": {
+    "message": "Guarda título, canal, tempo assistido, duração, porcentagem e datas de cada vídeo que você assiste. Tudo fica neste navegador."
+  },
+  "qualityToggle": { "message": "Forçar resolução do vídeo" },
+  "qualityLabel": { "message": "Resolução" },
+  "qualityAuto": { "message": "Automática" },
+  "qualityHighest": { "message": "Melhor disponível" },
+  "qualityHint": {
+    "message": "Se o vídeo não tiver a qualidade escolhida, a melhor qualidade abaixo dela é usada."
+  },
+  "captionsToggle": { "message": "Ligar legendas" },
+  "captionsLabel": { "message": "Idioma" },
+  "captionsHint": {
+    "message": "Usa a faixa automática nesse idioma quando existir; caso contrário, legendas humanas ou uma faixa traduzida."
+  },
+  "liveDelayToggle": { "message": "Reduzir o delay de lives" },
+  "liveDelayBufferLabel": { "message": "Buffer" },
+  "liveDelayHintIntro": {
+    "message": "Só afeta lives enquanto estão rodando: se a reprodução ficar mais de um buffer atrás da borda ao vivo, ela acelera sozinha até voltar ao alvo."
+  },
+  "liveDelayRealTime": { "message": "Tempo real" },
+  "liveDelayRealTimeHint": {
+    "message": "Fica colado na borda ao vivo. Escolha só com conexão rápida e muito estável, em que uma oscilação viraria pausa visível."
+  },
+  "liveDelay2s": { "message": "2 segundos" },
+  "liveDelay2sHint": {
+    "message": "Colchão mínimo: absorve oscilações curtas em conexões rápidas e o atraso fica quase imperceptível."
+  },
+  "liveDelay5s": { "message": "5 segundos" },
+  "liveDelay5sHint": {
+    "message": "Equilíbrio para conexões médias: reprodução mais suave, com atraso ainda bem abaixo do normal do YouTube."
+  },
+  "liveDelay10s": { "message": "10 segundos" },
+  "liveDelay10sHint": {
+    "message": "Colchão extra para conexões lentas ou instáveis: a menor chance de travar, com o maior atraso entre as opções."
+  },
+  "skipToggle": { "message": "Botão de próximo vídeo" },
+  "skipAutoToggle": { "message": "Pular automaticamente" },
+  "skipHint": {
+    "message": "Em vídeos que você já assistiu (90% ou mais), mostra sobre a página um botão que vai para o próximo vídeo. Com o pulo automático, ele vai sozinho. Nunca se aplica a lives."
+  },
+  "debugToggle": { "message": "Log de depuração" },
+  "debugHint": {
+    "message": "Imprime informações extras no console do navegador. Útil quando algo não está funcionando."
+  },
+  "optionsSubtitle": { "message": "Configurações e histórico de vídeos assistidos" },
+  "toastSettingsSaved": { "message": "Configurações salvas" },
+  "toastVideoRemoved": { "message": "Vídeo removido" },
+  "confirmClear": {
+    "message": "Apagar o histórico de vídeos assistidos ($count$ no total)? Não dá para desfazer.",
+    "placeholders": {
+      "count": { "content": "$1" }
+    }
+  },
+  "toastHistoryCleared": { "message": "Histórico apagado" },
+  "toastExportDownloaded": { "message": "Exportação baixada" },
+  "watchedVideosTitle": { "message": "Vídeos assistidos" },
+  "videosSearchPlaceholder": { "message": "Buscar por título ou canal" },
+  "exportJsonButton": { "message": "Exportar JSON" },
+  "clearAllButton": { "message": "Apagar tudo" },
+  "emptyWatched": {
+    "message": "Nenhum vídeo registrado ainda. Assista a algo no YouTube e volte."
+  },
+  "emptySearch": { "message": "Nenhum vídeo corresponde à sua busca." },
+  "loadMoreButton": { "message": "Carregar mais" },
+  "optionsTitle": { "message": "YT Essentials - Configurações" },
+  "videoUnknownChannel": { "message": "Canal desconhecido" },
+  "videoStats": {
+    "message": "$watched$ de $duration$ ($percent$%) - assistido $when$",
+    "placeholders": {
+      "watched": { "content": "$1" },
+      "duration": { "content": "$2" },
+      "percent": { "content": "$3" },
+      "when": { "content": "$4" }
+    }
+  },
+  "videoPlayCount": {
+    "message": "reproduções: $count$",
+    "placeholders": {
+      "count": { "content": "$1" }
+    }
+  },
+  "removeButton": { "message": "Remover" },
+  "removeTitle": { "message": "Remover do histórico" },
+  "openOptionsButton": { "message": "Configurações & assistidos" },
+  "savedBadge": { "message": "Salvo" },
+  "skipButton": { "message": "Próximo vídeo" },
+  "skipTooltip": {
+    "message": "Você já assistiu a este vídeo ($percent$%)",
+    "placeholders": {
+      "percent": { "content": "$1" }
+    }
+  },
+  "staleNotice": {
+    "message": "O YT Essentials foi atualizado - recarregue a página para continuar funcionando."
+  },
+  "liveBadgeBehind": {
+    "message": "$delay$s atrás (buffer $buffer$s)",
+    "placeholders": {
+      "delay": { "content": "$1" },
+      "buffer": { "content": "$2" }
+    }
+  },
+  "liveBadgeBehindRealTime": {
+    "message": "$delay$s atrás (tempo real)",
+    "placeholders": {
+      "delay": { "content": "$1" }
+    }
+  },
+  "liveBadgeUnmeasured": {
+    "message": "ao vivo (buffer $buffer$s)",
+    "placeholders": {
+      "buffer": { "content": "$1" }
+    }
+  },
+  "liveBadgeUnmeasuredRealTime": { "message": "ao vivo (tempo real)" },
+  "timeJustNow": { "message": "agora mesmo" }
+}

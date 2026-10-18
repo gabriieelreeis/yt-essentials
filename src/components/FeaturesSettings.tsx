@@ -1,5 +1,6 @@
 import { Toggle } from '@/components/Toggle';
 import { CAPTION_LANGUAGES, LIVE_DELAY_OPTIONS, QUALITY_LEVELS } from '@/shared/constants';
+import { languageDisplayName, t } from '@/shared/i18n';
 import type { DeepPartial, LiveDelayBuffer, QualityValue, Settings } from '@/shared/types';
 
 interface FeaturesSettingsProps {
@@ -24,49 +25,44 @@ export function FeaturesSettings({ settings, onChange, showDebug = false }: Feat
         <Toggle
           checked={settings.watched.enabled}
           onChange={(enabled) => onChange({ watched: { enabled } })}
-          label="Save watched videos"
+          label={t('watchedToggle')}
         />
-        <p className="hint">
-          Stores title, channel, watched time, duration, percentage and dates for every video you
-          watch. Everything stays in this browser.
-        </p>
+        <p className="hint">{t('watchedHint')}</p>
       </section>
 
       <section className="card">
         <Toggle
           checked={settings.quality.enabled}
           onChange={(enabled) => onChange({ quality: { enabled } })}
-          label="Force video resolution"
+          label={t('qualityToggle')}
         />
         <div className="row">
-          <label htmlFor="quality-value">Resolution</label>
+          <label htmlFor="quality-value">{t('qualityLabel')}</label>
           <select
             id="quality-value"
             value={settings.quality.value}
             disabled={!settings.quality.enabled}
             onChange={(event) => onChange({ quality: { value: event.target.value as QualityValue } })}
           >
-            <option value="auto">Auto</option>
-            {QUALITY_LEVELS.map(({ value, label }) => (
+            <option value="auto">{t('qualityAuto')}</option>
+            {QUALITY_LEVELS.map(({ value, label, labelKey }) => (
               <option key={value} value={value}>
-                {label}
+                {labelKey ? t(labelKey) : label}
               </option>
             ))}
           </select>
         </div>
-        <p className="hint">
-          If the video does not offer the chosen quality, the best quality below it is used.
-        </p>
+        <p className="hint">{t('qualityHint')}</p>
       </section>
 
       <section className="card">
         <Toggle
           checked={settings.captions.enabled}
           onChange={(enabled) => onChange({ captions: { enabled } })}
-          label="Turn on captions"
+          label={t('captionsToggle')}
         />
         <div className="row">
-          <label htmlFor="captions-language">Language</label>
+          <label htmlFor="captions-language">{t('captionsLabel')}</label>
           <select
             id="captions-language"
             value={settings.captions.language}
@@ -75,25 +71,22 @@ export function FeaturesSettings({ settings, onChange, showDebug = false }: Feat
           >
             {CAPTION_LANGUAGES.map(({ code, name }) => (
               <option key={code} value={code}>
-                {name}
+                {languageDisplayName(code, name)}
               </option>
             ))}
           </select>
         </div>
-        <p className="hint">
-          Uses the auto-generated track of that language when available, falling back to human
-          captions or a translated track.
-        </p>
+        <p className="hint">{t('captionsHint')}</p>
       </section>
 
       <section className="card">
         <Toggle
           checked={settings.liveDelay.enabled}
           onChange={(enabled) => onChange({ liveDelay: { enabled } })}
-          label="Reduce live delay"
+          label={t('liveDelayToggle')}
         />
         <div className="row">
-          <label htmlFor="live-delay-buffer">Buffer</label>
+          <label htmlFor="live-delay-buffer">{t('liveDelayBufferLabel')}</label>
           <select
             id="live-delay-buffer"
             value={settings.liveDelay.buffer}
@@ -102,16 +95,15 @@ export function FeaturesSettings({ settings, onChange, showDebug = false }: Feat
               onChange({ liveDelay: { buffer: event.target.value as LiveDelayBuffer } })
             }
           >
-            {LIVE_DELAY_OPTIONS.map(({ value, label }) => (
+            {LIVE_DELAY_OPTIONS.map(({ value, labelKey }) => (
               <option key={value} value={value}>
-                {label}
+                {t(labelKey)}
               </option>
             ))}
           </select>
         </div>
         <p className="hint">
-          Only affects live streams, while they are playing: playback is dragged back whenever it
-          drifts more than the chosen buffer behind the live edge. {liveDelayOption?.hint}
+          {t('liveDelayHintIntro')} {liveDelayOption ? t(liveDelayOption.hintKey) : ''}
         </p>
       </section>
 
@@ -119,20 +111,16 @@ export function FeaturesSettings({ settings, onChange, showDebug = false }: Feat
         <Toggle
           checked={settings.skip.enabled}
           onChange={(enabled) => onChange({ skip: { enabled } })}
-          label="Next video button"
+          label={t('skipToggle')}
         />
         <Toggle
           className="sub"
           checked={settings.skip.autoSkip}
           onChange={(autoSkip) => onChange({ skip: { autoSkip } })}
           disabled={!settings.skip.enabled}
-          label="Skip automatically"
+          label={t('skipAutoToggle')}
         />
-        <p className="hint">
-          On videos you already watched (90% or more), shows a button in the player that goes to
-          the next video. With automatic skipping, it goes there by itself. Never applies to live
-          streams.
-        </p>
+        <p className="hint">{t('skipHint')}</p>
       </section>
 
       {showDebug ? (
@@ -140,11 +128,9 @@ export function FeaturesSettings({ settings, onChange, showDebug = false }: Feat
           <Toggle
             checked={settings.debug}
             onChange={(debug) => onChange({ debug })}
-            label="Debug logging"
+            label={t('debugToggle')}
           />
-          <p className="hint">
-            Prints extra information to the browser console. Useful when something is not working.
-          </p>
+          <p className="hint">{t('debugHint')}</p>
         </section>
       ) : null}
     </>

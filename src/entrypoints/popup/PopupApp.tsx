@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { FeaturesSettings } from '@/components/FeaturesSettings';
 import { useSettings } from '@/hooks/useSettings';
+import { t } from '@/shared/i18n';
 import type { DeepPartial, Settings } from '@/shared/types';
 
 export function PopupApp() {
@@ -31,10 +32,10 @@ export function PopupApp() {
 
       <footer className="popup-footer">
         <button type="button" onClick={() => void chrome.runtime.openOptionsPage()}>
-          Settings &amp; watched list
+          {t('openOptionsButton')}
         </button>
         <span className={`saved${saved ? ' show' : ''}`} role="status">
-          Saved
+          {t('savedBadge')}
         </span>
       </footer>
     </>

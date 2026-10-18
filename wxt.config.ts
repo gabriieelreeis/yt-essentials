@@ -19,6 +19,10 @@ export default defineConfig({
   imports: false,
   manifest: {
     name: 'YT Essentials',
+    // Resolved by Chrome from public/_locales/<browser language>/messages.json
+    // (see src/shared/i18n.ts); "en" is the fallback for other languages.
+    description: '__MSG_extDescription__',
+    default_locale: 'en',
     minimum_chrome_version: '111',
     permissions: ['storage'],
     host_permissions: ['https://www.youtube.com/*'],

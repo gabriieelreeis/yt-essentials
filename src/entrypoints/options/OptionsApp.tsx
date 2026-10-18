@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { FeaturesSettings } from '@/components/FeaturesSettings';
 import { VideoRow } from '@/components/VideoRow';
 import { useSettings } from '@/hooks/useSettings';
+import { t } from '@/shared/i18n';
 import {
   clearWatchedVideos,
   getWatchedVideos,
@@ -51,24 +52,22 @@ export function OptionsApp() {
   const visible = filtered.slice(0, visibleCount);
 
   function handleSettingsChange(patch: DeepPartial<Settings>): void {
-    void update(patch).then(() => showToast('Settings saved'));
+    void update(patch).then(() => showToast(t('toastSettingsSaved')));
   }
 
   function handleRemove(id: string): void {
     void removeWatchedVideo(id)
       .then(() => refreshVideos())
-      .then(() => showToast('Video removed'));
+      .then(() => showToast(t('toastVideoRemoved')));
   }
 
   function handleClear(): void {
     if (videos.length === 0) return;
-    const confirmed = confirm(
-      `Delete the history of ${videos.length} watched video(s)? This cannot be undone.`
-    );
+    const confirmed = confirm(t('confirmClear', [String(videos.length)]));
     if (!confirmed) return;
     void clearWatchedVideos()
       .then(() => refreshVideos())
-      .then(() => showToast('History cleared'));
+      .then(() => showToast(t('toastHistoryCleared')));
   }
 
   function handleExport(): void {
@@ -85,7 +84,7 @@ export function OptionsApp() {
     link.download = `yt-essentials-watched-${new Date().toISOString().slice(0, 10)}.json`;
     link.click();
     URL.revokeObjectURL(url);
-    showToast('Export downloaded');
+    showToast(t('toastExportDownloaded'));
   }
 
   if (!settings) return null;
@@ -94,7 +93,7 @@ export function OptionsApp() {
     <>
       <header className="page-header">
         <h1>YT Essentials</h1>
-        <p className="subtitle">Settings and watched-video history</p>
+        <p className="subtitle">{t('optionsSubtitle')}</p>
       </header>
 
       <main className="page-body">
@@ -103,12 +102,12 @@ export function OptionsApp() {
         <section className="card">
           <div className="card-header">
             <h2>
-              Watched videos <span className="badge">{filtered.length}</span>
+              {t('watchedVideosTitle')} <span className="badge">{filtered.length}</span>
             </h2>
             <div className="toolbar">
               <input
                 type="search"
-                placeholder="Search by title or channel"
+                placeholder={t('videosSearchPlaceholder')}
                 autoComplete="off"
                 value={query}
                 onChange={(event) => {
@@ -117,10 +116,10 @@ export function OptionsApp() {
                 }}
               />
               <button type="button" onClick={handleExport}>
-                Export JSON
+                {t('exportJsonButton')}
               </button>
               <button type="button" className="danger" onClick={handleClear}>
-                Clear all
+                {t('clearAllButton')}
               </button>
             </div>
           </div>
@@ -132,10 +131,10 @@ export function OptionsApp() {
           </div>
 
           {videos.length === 0 ? (
-            <p className="empty">No videos recorded yet. Watch something on YouTube and come back.</p>
+            <p className="empty">{t('emptyWatched')}</p>
           ) : null}
           {videos.length > 0 && filtered.length === 0 ? (
-            <p className="empty">No videos match your search.</p>
+            <p className="empty">{t('emptySearch')}</p>
           ) : null}
           {filtered.length > visibleCount ? (
             <button
@@ -143,7 +142,7 @@ export function OptionsApp() {
               className="load-more"
               onClick={() => setVisibleCount((count) => count + PAGE_SIZE)}
             >
-              Load more
+              {t('loadMoreButton')}
             </button>
           ) : null}
         </section>

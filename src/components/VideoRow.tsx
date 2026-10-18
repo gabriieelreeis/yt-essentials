@@ -1,3 +1,4 @@
+import { t } from '@/shared/i18n';
 import type { WatchedVideoRecord } from '@/shared/types';
 import { formatDuration, formatRelativeTime } from '@/shared/utils';
 
@@ -15,7 +16,7 @@ function safeYouTubeUrl(video: WatchedVideoRecord): string {
 /** One entry of the watched-video history. */
 export function VideoRow({ video, onRemove }: VideoRowProps) {
   const percent = Math.min(Math.max(video.percent || 0, 0), 100);
-  const plays = video.playCount > 1 ? ` - played ${video.playCount}x` : '';
+  const plays = video.playCount > 1 ? ` - ${t('videoPlayCount', [String(video.playCount)])}` : '';
 
   return (
     <article className="video">
@@ -29,19 +30,23 @@ export function VideoRow({ video, onRemove }: VideoRowProps) {
         <a className="title" href={safeYouTubeUrl(video)} target="_blank" rel="noreferrer">
           {video.title || video.id}
         </a>
-        <div className="channel">{video.channel || 'Unknown channel'}</div>
+        <div className="channel">{video.channel || t('videoUnknownChannel')}</div>
         <div className="progress">
           <div className="progress-bar" style={{ width: `${percent}%` }} />
         </div>
         <div className="stats">
-          {formatDuration(video.watchedSeconds)} of {formatDuration(video.duration)} ({percent}%) -
-          watched {formatRelativeTime(video.lastWatchedAt)}
+          {t('videoStats', [
+            formatDuration(video.watchedSeconds),
+            formatDuration(video.duration),
+            String(percent),
+            formatRelativeTime(video.lastWatchedAt)
+          ])}
           {plays}
         </div>
       </div>
       <div className="actions">
-        <button type="button" title="Remove from history" onClick={() => onRemove(video.id)}>
-          Remove
+        <button type="button" title={t('removeTitle')} onClick={() => onRemove(video.id)}>
+          {t('removeButton')}
         </button>
       </div>
     </article>

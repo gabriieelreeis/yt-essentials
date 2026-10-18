@@ -6,9 +6,10 @@
 > Se uma decisão relevante for tomada que não esteja aqui, escreva aqui — do
 > contrário, o próximo agente vai perder o contexto.
 
-Última atualização: 2026-10-18 — v0.7.0 (delay de lives com catch-up por
-**aceleração do próprio player** e indicador no player com o buffer e o tempo
-atrás da borda; compilação e build verificados, QA manual no YouTube pendente).
+Última atualização: 2026-10-18 — v0.8.0 (interface traduzida para pt-BR, inglês,
+espanhol, russo e alemão via `chrome.i18n` nativo, com o idioma do navegador e
+fallback para inglês — seção 5.8; compilação e build verificados, QA manual no
+YouTube pendente).
 
 ---
 
@@ -18,7 +19,8 @@ atrás da borda; compilação e build verificados, QA manual no YouTube pendente
 acontece no YouTube e melhora a experiência do usuário. Repositório:
 `yt-essentials`.
 
-Escopo da v0.6.0 (exatamente estas cinco funcionalidades, nada mais):
+Escopo da v0.8.0 (exatamente estas cinco funcionalidades, nada mais — a
+interface é traduzida, seção 5.8):
 
 1. **Salvar vídeos assistidos** — grava localmente título, canal, tempo assistido,
    duração, porcentagem, contagem de reproduções e datas de cada vídeo assistido.
@@ -45,14 +47,17 @@ Escopo da v0.6.0 (exatamente estas cinco funcionalidades, nada mais):
    de todo o conteúdo). O clique usa o botão "próximo" nativo do YouTube
    (playlists e autoplay, como um clique do usuário) e, quando ele não existe no
    DOM, a API do player (`nextVideo()`) via main world. **Nunca aparece em
-   lives.** Configurável no popup/options: toggle **Next video button** (ligado
-   por padrão) e sub-opção **Skip automatically** (desligada por padrão) que
-   avança sozinho. Detalhes na seção 5.6.
+   lives.** Configurável no popup/options: toggle **Next video button** (em
+   pt-BR, "Próximo vídeo"; ligado por padrão) e sub-opção **Skip automatically**
+   ("Pular automaticamente"; desligada por padrão) que avança sozinho. Os nomes
+   em inglês são as chaves de código; os textos da UI são traduzidos por locale
+   (seção 5.8). Detalhes na seção 5.6.
 
 **Fora de escopo por enquanto** (não implemente sem pedido explícito do usuário):
 retomar vídeo de onde parou, sincronização entre dispositivos, bloqueio de
-anúncios, download de vídeos, i18n da interface (interface hoje é só em inglês),
-service worker/background, testes automatizados.
+anúncios, download de vídeos, service worker/background, testes automatizados.
+(A i18n da UI saiu da lista na v0.8.0 — seção 5.8; a lista de idiomas é fechada
+e **não** há seletor de idioma na interface.)
 
 ---
 
@@ -70,7 +75,8 @@ service worker/background, testes automatizados.
 | Build | **Obrigatório**: `npm run build` → carregar `.output/chrome-mv3/` no Chrome |
 | Persistência | `chrome.storage.local` (única permissão além de host) |
 | Permissões de host | `https://www.youtube.com/*` |
-| UI / comentários de código | **Inglês** |
+| Comentários / logs / código | **Inglês** |
+| Idiomas da UI | **pt-BR, en, es, ru, de** via `chrome.i18n`; o idioma segue o navegador e cai para inglês nos demais (seção 5.8) |
 | Documentação (este arquivo, README) | **Português (Brasil)** |
 
 **Atenção (Windows/PowerShell):** nesta máquina o shim `npm.ps1` é bloqueado por
@@ -89,10 +95,11 @@ package.json                # scripts: dev / build / zip / compile; postinstall:
 wxt.config.ts               # srcDir=src, módulo React, imports:false e manifest (permissões, ícones)
 tsconfig.json               # extends ./.wxt/tsconfig.json (gerado por `wxt prepare`) + types:["chrome"]
 public/icons/*.png          # ícones (copiados verbatim para o build; regerar com tools/make-icons.ps1)
+public/_locales/*/messages.json  # traduções da UI (en, pt_BR, es, ru, de; seção 5.8)
 tools/make-icons.ps1        # regera os ícones (PowerShell + System.Drawing)
 src/
   entrypoints/              # ← única pasta escaneada pelo WXT como entrypoints
-    content.ts              # content script ISOLATED (storage + navegação + gravação + botão de pular)
+    content.ts              # content script ISOLATED (storage + navegação + gravação + botão de pular + badge)
     main-world.content.ts   # content script MAIN world (API do player: qualidade, legendas, delay de lives)
     popup/index.html        # entrypoint do popup (WXT nomeia pelo diretório)
     popup/main.tsx          # bootstrap React do popup
@@ -110,6 +117,7 @@ src/
     messages.ts             # protocolo postMessage entre os dois mundos
     youtube-events.ts       # augmentation de tipos dos eventos custom do YouTube
     skip-button.css         # estilo do botão "Next video" (injetado via content.ts)
+    i18n.ts                 # textos da UI (`t()` sobre chrome.i18n; seção 5.8)
     logger.ts, utils.ts, theme.css
   components/               # componentes React compartilhados (Toggle, FeaturesSettings, VideoRow)
   hooks/                    # hooks React (useSettings)
@@ -379,7 +387,8 @@ reatividade é feita por `storage.onChanged`.
   `#yte-stale-notice` (fixed, rodapé central, fundo vermelho,
   `pointer-events: none`, some em 15s) quando `ctx.isValid` falha; é o sintoma
   "recarreguei a extensão e nada funciona nesta aba".
-- **Tooltip:** `You already watched this video (N%)` com o percentual anterior.
+- **Tooltip:** `You already watched this video (N%)` com o percentual anterior
+  (texto vem do locale ativo — seção 5.8).
 
 ### 5.7 Fluxo: redução do delay de lives (main-world.content.ts)
 
@@ -411,8 +420,9 @@ reatividade é feita por `storage.onChanged`.
   `{type:'live-status'}` (buffer, delay, `catchingUp`, taxa) e o `content.ts`
   desenha `#yte-live-status` **dentro do `#movie_player`** (canto superior
   direito, `pointer-events: none`) — visível também em **tela cheia**, ao
-  contrário do overlay do botão "Next video". Texto:
-  `12.3s behind (buffer 5s)` ou `... (real time)` e ` · 1.5x` enquanto acelera.
+  contrário do overlay do botão "Next video". Texto: `12.3s behind (buffer 5s)`
+  ou `... (real time)` e ` · 1.5x` enquanto acelera (em pt-BR: `12.3s atrás
+  (buffer 5s)` — textos do locale ativo, seção 5.8).
   O badge some quando o status fica velho (>5 s sem publicação: recurso
   desligado, saiu da live, VOD). Estilo em `skip-button.css` (id espelhado em
   `LIVE_STATUS_ID` no `content.ts`).
@@ -425,6 +435,43 @@ reatividade é feita por `storage.onChanged`.
   latência de transmissão do streamer, só mantém o player na borda que o
   YouTube entrega. Em aba oculta o Chrome throttla timers (~1×/min após um
   tempo): a aceleração já ligada continua, só as decisões ficam mais espaçadas.
+
+---
+
+### 5.8 Fluxo: i18n da interface (chrome.i18n nativo)
+
+- **Idiomas:** `pt_BR`, `en`, `es`, `ru`, `de` — 56 chaves por idioma, todas
+  completas. O idioma vem do **navegador** (não há seletor na UI); qualquer
+  outro idioma cai em inglês (`default_locale: "en"` no manifest). pt-PT pode
+  receber pt-BR ou inglês (decisão do Chrome).
+- **Arquivos:** `public/_locales/<locale>/messages.json`, copiados verbatim
+  para a raiz do build. O WXT lê o arquivo do `default_locale` (`en`) e gera a
+  **união tipada** de chaves em `.wxt/types/i18n.d.ts` — chave errada em `t()`
+  quebra o `npm run compile` (rode o build uma vez após mexer nos locales, pois
+  os tipos são regenerados ali).
+- **Helper:** `src/shared/i18n.ts` exporta `t(key, substitutions?)` (fallback:
+  devolve a própria chave em vez de string vazia), `getUiLocale()` (idioma do
+  navegador, para o `Intl`) e `languageDisplayName()` (nomes de idiomas de
+  legenda via `Intl.DisplayNames`). Usa `browser` de `wxt/browser` porque só
+  esse módulo recebe a tipagem gerada — o resto do projeto segue com `chrome.*`.
+- **Onde é usado:** popup/options (todos os textos), `content.ts` (botão,
+  tooltip, aviso de contexto e badge de delay) e `utils.ts`
+  (`formatRelativeTime` usa `Intl.RelativeTimeFormat(locale)`; "just now" virou
+  a chave `timeJustNow`). O `main-world.content.ts` **não tem texto de UI** (sem
+  `chrome.*`; só logs de debug em inglês).
+- **Manifest:** `description: "__MSG_extDescription__"` + `default_locale:
+  "en"`; a descrição aparece traduzida em `chrome://extensions`.
+- **Frase inteira, não concatenação:** badge, tooltip e histórico usam mensagens
+  com placeholders (`$delay$`, `$buffer$`, `$percent$`, `$count$`) para o
+  tradutor receber a frase montável (ordem das palavras varia; russo tem
+  unidade e plural próprios). O sufixo ` · 1.5x` do catch-up é dado, não texto.
+- **`Intl` em vez de mensagens** para nomes de idiomas de legenda (30 × 5
+  locales seriam centenas de strings) e datas relativas — funciona em
+  **qualquer** idioma de navegador, não só nos 5. Os nomes em inglês de
+  `CAPTION_LANGUAGES` ficaram como fallback.
+- **Adicionar idioma novo:** criar `public/_locales/<novo>/messages.json`
+  copiando o `en` com todas as chaves, traduzir e rebuildar. Nenhum código
+  muda (o tipo gerado só olha o `en`).
 
 ---
 
@@ -460,6 +507,11 @@ reatividade é feita por `storage.onChanged`.
 | Live delay **desligado por padrão** | Recursos que mexem na reprodução via APIs internas são opt-in no projeto (como resolução/legendas) — e ainda não houve QA manual em navegador real. |
 | Sincronia de live só com o player **playing** (state 1, sem `ad-showing`) | Nunca tirar o usuário de uma pausa nem competir com buffering/anúncio; a aceleração é desligada (e a velocidade restaurada) ao pausar e volta em ≤1 s ao dar play. |
 | Indicador de delay **dentro do `#movie_player`** (não overlay da página) | Pedido do usuário para ver buffer e tempo atrás; dentro do player ele aparece também em **tela cheia** (onde o overlay do botão "Next video" não aparece). Dados via `{type:'live-status'}`; CSS no arquivo compartilhado e DOM no `content.ts`. |
+| i18n com **`chrome.i18n` nativo** (sem `@wxt-dev/i18n`) | Zero dependências novas e fallback automático: o Chrome resolve o idioma do navegador e usa `default_locale: "en"` no que faltar. O WXT já gera a **união tipada** das chaves a partir de `public/_locales/en/messages.json`, então não se perde a segurança de tipos. |
+| Textos como **chave** em constantes (`labelKey`/`hintKey` em `LIVE_DELAY_OPTIONS`/`QUALITY_LEVELS`) | O texto vive só nos messages.json; frase duplicada em constante + locale sairia de sincronia. Chave inexistente quebra o `npm run compile` (união `MessageKey`). |
+| Nomes de idiomas de legenda via **`Intl.DisplayNames`** e datas via **`Intl.RelativeTimeFormat`** | 30 idiomas × 5 locales seriam centenas de strings para manter; o `Intl` resolve de graça e em **qualquer** idioma de navegador (não só nos 5). Os nomes em inglês de `CAPTION_LANGUAGES` viraram fallback. |
+| Frases da UI como **frase inteira com placeholders** (`$delay$`, `$buffer$`, `$count$`), não concatenação de pedaços | Ordem das palavras varia por idioma (russo: `отставание $delay$ с (буфер $buffer$ с)`). Plural: onde o inglês usava "(s)/x vezes", cada idioma usou construção neutra ("no total", "всего", "insgesamt"). |
+| Texto do badge montado no `content.ts` com `t()` a partir do payload | Os números continuam vindo do main world; ele não tem `chrome.*` nem textos de UI (seção 5.8). |
 
 ---
 
@@ -487,6 +539,14 @@ reatividade é feita por `storage.onChanged`.
 - Em aba oculta o Chrome throttla os timers: as verificações do delay de live
   ficam mais espaçadas (a aceleração já ligada continua valendo), voltando ao
   ritmo normal quando a aba fica visível.
+- O idioma da UI é o do **navegador**, fixado quando a extensão carrega: não há
+  seletor próprio; trocar exige mudar o idioma do Chrome (ou do sistema) e
+  reabrir popup/options/abas do YouTube. A lista é fechada (pt-BR, en, es, ru,
+  de); qualquer outra cai em inglês, inclusive pt-PT (que pode receber pt-BR ou
+  inglês — decisão do Chrome).
+- Chave i18n faltando numa locale: `t()` devolve a **própria chave** (aparece
+  crua na UI, nada quebra). O compile garante que as chaves usadas existem no
+  `en`; mantendo os cinco arquivos completos, o problema não aparece.
 - O histórico é local: limpar dados da extensão (`chrome://extensions` →
   dados) apaga tudo. Export JSON é o escape.
 - Lives (`duration = Infinity`) salvam progresso mas `percent` fica 0.
@@ -563,7 +623,8 @@ Checklist manual de QA (rodar antes de considerar uma mudança concluída):
 
 - [ ] `npm run compile` e `npm run build` sem erros.
 - [ ] Popup abre, toggles refletem o que está salvo e persistem após fechar/abrir.
-- [ ] Página de opções abre pelo popup (`Settings & watched list`).
+- [ ] Página de opções abre pelo popup (pt-BR: `Configurações & assistidos`; en:
+      `Settings & watched list`).
 - [ ] Abrir um vídeo, assistir ~10s: registro aparece na lista com título, canal,
       progresso e data; `playCount` = 1.
 - [ ] Navegar para outro vídeo sem reload: novo registro; `playCount` do anterior
@@ -574,20 +635,27 @@ Checklist manual de QA (rodar antes de considerar uma mudança concluída):
 - [ ] Ativar legendas (ex.: Português) em vídeo com ASR em PT: legenda aparece
       ligada. Testar vídeo sem faixa PT (deve traduzir, se houver tradução).
 - [ ] Ligar **Reduce live delay** com buffer de 5 s numa live: o badge no canto
-      superior direito **do player** mostra `X.Xs behind (buffer 5s)`
-      atualizando ~1×/s; pausar ~1 min e voltar: a reprodução acelera (badge
-      `· 1.5x`), converge para o buffer e a velocidade volta a 1x (Debug mostra
-      `live delay: catching up` e `catch-up finished`).
+      superior direito **do player** mostra o delay atualizando ~1×/s (en:
+      `X.Xs behind (buffer 5s)`; pt-BR: `X.Xs atrás (buffer 5s)`); pausar
+      ~1 min e voltar: a reprodução acelera (badge `· 1.5x`), converge para o
+      buffer e a velocidade volta a 1x (Debug mostra `live delay: catching up`
+      e `catch-up finished`).
 - [ ] Entrar em **tela cheia** com o badge visível (deve continuar aparecendo);
       trocar de vídeo/sair da live: o badge some em ≤5 s.
 - [ ] Buffer **Real time**: fica colado na borda (pode pausar/travar em conexão
       instável — é o esperado). Com o toggle desligado e em VODs: nada acontece
       (sem aceleração, sem badge, sem linha de ação no debug).
+- [ ] **Idiomas**: com o Chrome em pt-BR (depois es, ru e de), popup, opções,
+      botão, tooltip, badge e aviso de atualização aparecem no idioma do
+      navegador, e `chrome://extensions` mostra a descrição traduzida. Com um
+      idioma não suportado (ex.: fr), tudo cai em inglês. Na lista de vídeos, a
+      data relativa e os nomes de idiomas de legenda acompanham o navegador.
 - [ ] Desligar tudo nos toggles e confirmar que nada mais é aplicado/gravado.
 - [ ] Vídeo já assistido: assistir um vídeo até o fim (≥ 90%), abrir outro e
-      voltar. O botão **Next video** aparece no canto inferior esquerdo **da
-      página** (overlay fixo por cima do conteúdo — rolar a página não o move;
-      tooltip com a %). Clicar avança sem pausar o vídeo atual.
+      voltar. O botão **Next video** (pt-BR: **Próximo vídeo**) aparece no canto
+      inferior esquerdo **da página** (overlay fixo por cima do conteúdo — rolar
+      a página não o move; tooltip com a %). Clicar avança sem pausar o vídeo
+      atual.
 - [ ] Clicar no botão estando numa **playlist** avança para o próximo item da
       playlist; fora de playlist, segue o autoplay (mesmo destino do botão
       "próximo" nativo). Testar também um vídeo em que o botão nativo não exista
@@ -607,9 +675,10 @@ Checklist manual de QA (rodar antes de considerar uma mudança concluída):
       com `available`/`reason` (ex.: `not watched before (>= 90%)`, `live
       stream`, `already watched`).
 - [ ] Recarregar a extensão com uma aba do YouTube aberta: aparece o aviso
-      vermelho `YT Essentials was updated...` no rodapé (some em 15s) e o console
-      mostra o `logger.info` (seção 7); depois de recarregar a aba, tudo volta a
-      funcionar.
+      vermelho de atualização no rodapé (pt-BR: `O YT Essentials foi
+      atualizado...`; en: `YT Essentials was updated...`; some em 15s) e o
+      console mostra o `logger.info` (seção 7); depois de recarregar a aba,
+      tudo volta a funcionar.
 - [ ] Debug ligado → console do YouTube mostra logs `[YT Essentials]` e
       `[YT Essentials:main]`.
 
@@ -683,7 +752,9 @@ do bloqueador.
 
 ## 9. Convenções de código
 
-- UI e comentários em **inglês**; este documento e o README em **PT-BR**.
+- Comentários, logs e identificadores de código em **inglês**; este documento e
+  o README em **PT-BR**. Textos da UI **nunca hardcoded**: vivem em
+  `public/_locales/*/messages.json` (seção 5.8).
 - TypeScript strict. Imports de tipos **sempre** com `import type`/`type` inline
   (`verbatimModuleSyntax` está ligado e o build quebra sem isso).
 - Imports entre pastas usam o alias `@/` (ex.: `@/shared/storage`); dentro da
@@ -709,7 +780,9 @@ do bloqueador.
   `textContent` (nunca `innerHTML`). Overlays vão no `document.body` com
   `position: fixed` e `z-index` alto; elementos informativos usam
   `pointer-events: none` para nunca roubar cliques da página.
-- Textos da UI em inglês, curtos, e `label`/`htmlFor` corretos.
+- Texto novo de UI: `t('chave')` (`src/shared/i18n.ts`) + a chave nos **cinco**
+  arquivos de locale (o `en` define o tipo; sem ele o compile acusa). Textos
+  curtos, `label`/`htmlFor` corretos.
 
 ---
 
@@ -720,7 +793,8 @@ do bloqueador.
 2. **Shorts como recurso de primeira classe** (hoje é best-effort).
 3. Regras por canal (ex.: resolução diferente por canal).
 4. Estatísticas (tempo total assistido, top canais).
-5. i18n da UI (`@wxt-dev/i18n` ou `chrome.i18n`).
+5. ~~i18n da UI~~ — **feito na v0.8.0** (pt-BR, en, es, ru e de via
+   `chrome.i18n` nativo; seção 5.8).
 6. Sincronizar settings via `chrome.storage.sync` (histórico continua local).
 7. Importar JSON de volta (hoje só exporta).
 8. Badge no ícone com o número de vídeos registrados hoje.
@@ -748,7 +822,7 @@ do bloqueador.
 
 ## 12. Estado atual
 
-- Versão: **0.7.0** (`package.json`), sem publicação na Chrome Web Store.
+- Versão: **0.8.0** (`package.json`), sem publicação na Chrome Web Store.
 - v0.2.0 (WXT + Vite + React + TypeScript) concluída e verificada; v0.3.0
   adicionou o botão "Next video"; v0.4.0 o tornou configurável com o
   "pular sozinho"; v0.4.1 tratou o "Extension context invalidated"; v0.5.0
@@ -757,14 +831,20 @@ do bloqueador.
   adicionou fallback `player.nextVideo()` e um aviso visível de contexto
   inválido; v0.6.0 adicionou a **redução do delay de lives** com buffer
   configurável; v0.7.0 trocou o catch-up por **aceleração do próprio player**
-  (1.5x) e adicionou o **indicador de delay dentro do player** (seção 5.7).
-- **Verificado em v0.7.0:** `npm run compile` limpo; `npm run build` OK
-  (`main-world.js` com `setPlaybackRate`/`live-status`/loop de 1 s e sem
-  `chrome.*`; `content.js` com o badge `#yte-live-status`; CSS do badge no
-  manifest; manifest na versão 0.7.0).
+  (1.5x) e adicionou o **indicador de delay dentro do player** (seção 5.7);
+  v0.8.0 traduziu a interface (pt-BR, inglês, espanhol, russo e alemão) com
+  `chrome.i18n` nativo, seguindo o idioma do navegador com fallback para inglês
+  (seção 5.8).
+- **Verificado em v0.8.0:** `npm run compile` limpo (chaves i18n tipadas pelo
+  WXT a partir do `en`); `npm run build` OK (`_locales/` com os 5 idiomas no
+  output, manifest com `default_locale: "en"`/`__MSG_extDescription__` na versão
+  0.8.0; `content.js` com `t()`; `main-world.js` sem `chrome.*`/i18n); os 5
+  `messages.json` checados por script (56 chaves idênticas, placeholders
+  declarados).
 - **Pendente: validação manual no YouTube** (checklist da seção 8 nunca foi
   executado em navegador real — inclui botão, auto-skip, fallback, logs de
-  estado, aviso de contexto inválido e agora o delay de lives e o badge).
+  estado, aviso de contexto inválido, o delay de lives com o badge e agora as
+  traduções nos 5 idiomas).
 - A v0.1.0 (vanilla JS, sem build) foi substituída pela v0.2.0; o histórico
   está no registro abaixo.
 
@@ -774,6 +854,7 @@ do bloqueador.
 
 | Data | Versão | Mudança |
 | --- | --- | --- |
+| 2026-10-18 | 0.8.0 | **i18n da interface** (pt-BR, inglês, espanhol, russo e alemão) com `chrome.i18n` nativo, sem dependências novas: `public/_locales/<locale>/messages.json` (56 chaves cada; o `en` define a união tipada gerada pelo WXT em `.wxt/types/i18n.d.ts`), manifest com `default_locale: "en"` + `description: "__MSG_extDescription__"` (fallback automático para inglês no que não existir). Novo `src/shared/i18n.ts` (`t()`, `getUiLocale()`, `languageDisplayName()` via `Intl.DisplayNames`); todos os textos de popup/options/content traduzidos (`content.ts`: botão, tooltip, aviso de contexto e badge por mensagens com placeholders `$delay$`/`$buffer$`/`$percent$`); `LIVE_DELAY_OPTIONS`/`QUALITY_LEVELS` passaram a carregar `labelKey`/`hintKey` (tipos `LiveDelayOption`/`QualityLevelOption` atualizados); datas relativas com `Intl.RelativeTimeFormat` (fim do `'en'` fixo e do "just now" hardcoded); `<html lang>` e título da página de opções dinâmicos. Verificado: compile limpo, build OK (5 locales no output, manifest 0.8.0), consistência dos 5 arquivos checada por script (56 chaves, placeholders). QA manual pendente. |
 | 2026-10-18 | 0.7.0 | Delay de lives v2: catch-up por **aceleração do próprio player** (`setPlaybackRate(1.5)`, fallback `video.playbackRate`) em vez de seek, mantendo até `buffer + 0,5 s` e restaurando a velocidade anterior (e respeitando mudança manual do usuário); loop passou a 1 s. Novo **badge `#yte-live-status` dentro do `#movie_player`** (canto superior direito, visível também em tela cheia) com `X.Xs behind (buffer Ns) · 1.5x`, alimentado pela mensagem `{type:'live-status'}` publicada pelo main world (novo `LiveStatusMessage` em `messages.ts`); some após 5 s sem dados ou com o recurso desligado. `seekTo` removido do tipo do player; CSS do badge em `skip-button.css`; `content.ts` agora recebe mensagens do main world e desenha o badge. Verificado: type-check limpo, build OK, manifest 0.7.0. QA manual pendente. |
 | 2026-10-18 | 0.6.0 | Nova função **reduzir o delay de lives** (`settings.liveDelay`, default desligado, buffer default `2s`). No main world, `checkLiveDelay()` roda a cada 2 s e, em live reproduzindo, mede `seekableEnd − current` via `getProgressState()`; quando o delay passa de `buffer + 1,5 s`, chama `player.seekTo(seekableEnd − buffer)` (catch-up por seek, sem mudar a velocidade; pausado/buffering/anúncio nunca é tocado). Buffers: tempo real (0 s), 2 s, 5 s e 10 s, cada um com informativo de conexão no popup/options (`LIVE_DELAY_OPTIONS`). Campo aditivo (sem bump de `SCHEMA_VERSION`), `PlayerSettings`/`main-world` atualizados, card novo em `FeaturesSettings.tsx`, `package.json`/descrição/README/docs atualizados. Verificado: type-check limpo, build OK, manifest 0.6.0. QA manual pendente. |
 | 2026-10-18 | 0.5.0 | (docs, sem mudança de código) Refino da nota de diagnóstico da seção 8 com a análise de um console real com adblock: `ERR_BLOCKED_BY_CLIENT` na sonda de conectividade `/generate_204` (suspeito principal da tela de offline), telemetria bloqueada sem impacto (`log_event`, `api/stats/qoe`, `/ptracking`, `pagead/lvz`) e `403` de `youtubei/v1/search|browse|get_watch` que vinham da extensão YoutubeAntiTranslate — não do bloqueador. Exceções mínimas sugeridas (`@@||www.youtube.com/generate_204`, `@@||i.ytimg.com/generate_204` e, se aplicável, `@@||www.youtube.com/youtubei/v1/browse$xmlhttprequest`). |

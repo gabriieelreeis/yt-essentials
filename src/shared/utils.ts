@@ -1,4 +1,6 @@
-/** Small pure helpers shared by every context. */
+import { getUiLocale, t } from './i18n';
+
+/** Small helpers shared by the UI contexts (content script, popup, options). */
 
 export function clamp(value: number, min: number, max: number): number {
   return Math.min(Math.max(value, min), max);
@@ -16,7 +18,7 @@ export function formatDuration(totalSeconds: number): string {
   return hours > 0 ? `${hours}:${pad(minutes)}:${pad(rest)}` : `${minutes}:${pad(rest)}`;
 }
 
-/** Timestamp (ms) -> "just now", "5 minutes ago", "3 days ago", ... */
+/** Timestamp (ms) -> localized "just now", "5 minutes ago", "3 days ago", ... */
 export function formatRelativeTime(timestamp: number): string {
   const diffMs = Number(timestamp) - Date.now();
   if (!Number.isFinite(diffMs)) return '';
@@ -29,11 +31,11 @@ export function formatRelativeTime(timestamp: number): string {
     ['hour', 3600000],
     ['minute', 60000]
   ];
-  const formatter = new Intl.RelativeTimeFormat('en', { numeric: 'auto' });
+  const formatter = new Intl.RelativeTimeFormat(getUiLocale(), { numeric: 'auto' });
   for (const [unit, unitMs] of units) {
     if (diff >= unitMs) return formatter.format(Math.round(diffMs / unitMs), unit);
   }
-  return 'just now';
+  return t('timeJustNow');
 }
 
 /**

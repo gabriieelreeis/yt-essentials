@@ -1,0 +1,119 @@
+{
+  "extDescription": {
+    "message": "Save watched videos, force resolution, auto-enable captions, reduce live delay and skip videos you already watched on YouTube."
+  },
+  "watchedToggle": { "message": "Save watched videos" },
+  "watchedHint": {
+    "message": "Stores title, channel, watched time, duration, percentage and dates for every video you watch. Everything stays in this browser."
+  },
+  "qualityToggle": { "message": "Force video resolution" },
+  "qualityLabel": { "message": "Resolution" },
+  "qualityAuto": { "message": "Auto" },
+  "qualityHighest": { "message": "Highest available" },
+  "qualityHint": {
+    "message": "If the video does not offer the chosen quality, the best quality below it is used."
+  },
+  "captionsToggle": { "message": "Turn on captions" },
+  "captionsLabel": { "message": "Language" },
+  "captionsHint": {
+    "message": "Uses the auto-generated track of that language when available, falling back to human captions or a translated track."
+  },
+  "liveDelayToggle": { "message": "Reduce live delay" },
+  "liveDelayBufferLabel": { "message": "Buffer" },
+  "liveDelayHintIntro": {
+    "message": "Only affects live streams while they are playing: if playback drifts more than the chosen buffer behind the live edge, it speeds up by itself until it is back on target."
+  },
+  "liveDelayRealTime": { "message": "Real time" },
+  "liveDelayRealTimeHint": {
+    "message": "Stays glued to the live edge. Pick it only with a fast and very stable connection, where a hiccup would become a visible pause."
+  },
+  "liveDelay2s": { "message": "2 seconds" },
+  "liveDelay2sHint": {
+    "message": "Tiny cushion: absorbs short hiccups on fast connections while the delay stays almost imperceptible."
+  },
+  "liveDelay5s": { "message": "5 seconds" },
+  "liveDelay5sHint": {
+    "message": "Balanced cushion for average connections: smoother playback, with a delay still clearly below YouTube's usual drift."
+  },
+  "liveDelay10s": { "message": "10 seconds" },
+  "liveDelay10sHint": {
+    "message": "Extra cushion for slow or unstable connections: the lowest chance of stutter, with the largest delay of the options."
+  },
+  "skipToggle": { "message": "Next video button" },
+  "skipAutoToggle": { "message": "Skip automatically" },
+  "skipHint": {
+    "message": "On videos you already watched (90% or more), shows a button over the page that goes to the next video. With automatic skipping, it goes there by itself. Never applies to live streams."
+  },
+  "debugToggle": { "message": "Debug logging" },
+  "debugHint": {
+    "message": "Prints extra information to the browser console. Useful when something is not working."
+  },
+  "optionsSubtitle": { "message": "Settings and watched-video history" },
+  "toastSettingsSaved": { "message": "Settings saved" },
+  "toastVideoRemoved": { "message": "Video removed" },
+  "confirmClear": {
+    "message": "Delete the history of $count$ watched video(s)? This cannot be undone.",
+    "placeholders": {
+      "count": { "content": "$1" }
+    }
+  },
+  "toastHistoryCleared": { "message": "History cleared" },
+  "toastExportDownloaded": { "message": "Export downloaded" },
+  "watchedVideosTitle": { "message": "Watched videos" },
+  "videosSearchPlaceholder": { "message": "Search by title or channel" },
+  "exportJsonButton": { "message": "Export JSON" },
+  "clearAllButton": { "message": "Clear all" },
+  "emptyWatched": { "message": "No videos recorded yet. Watch something on YouTube and come back." },
+  "emptySearch": { "message": "No videos match your search." },
+  "loadMoreButton": { "message": "Load more" },
+  "optionsTitle": { "message": "YT Essentials - Settings" },
+  "videoUnknownChannel": { "message": "Unknown channel" },
+  "videoStats": {
+    "message": "$watched$ of $duration$ ($percent$%) - watched $when$",
+    "placeholders": {
+      "watched": { "content": "$1" },
+      "duration": { "content": "$2" },
+      "percent": { "content": "$3" },
+      "when": { "content": "$4" }
+    }
+  },
+  "videoPlayCount": {
+    "message": "plays: $count$",
+    "placeholders": {
+      "count": { "content": "$1" }
+    }
+  },
+  "removeButton": { "message": "Remove" },
+  "removeTitle": { "message": "Remove from history" },
+  "openOptionsButton": { "message": "Settings & watched list" },
+  "savedBadge": { "message": "Saved" },
+  "skipButton": { "message": "Next video" },
+  "skipTooltip": {
+    "message": "You already watched this video ($percent$%)",
+    "placeholders": {
+      "percent": { "content": "$1" }
+    }
+  },
+  "staleNotice": { "message": "YT Essentials was updated - reload this page to keep it working." },
+  "liveBadgeBehind": {
+    "message": "$delay$s behind (buffer $buffer$s)",
+    "placeholders": {
+      "delay": { "content": "$1" },
+      "buffer": { "content": "$2" }
+    }
+  },
+  "liveBadgeBehindRealTime": {
+    "message": "$delay$s behind (real time)",
+    "placeholders": {
+      "delay": { "content": "$1" }
+    }
+  },
+  "liveBadgeUnmeasured": {
+    "message": "live (buffer $buffer$s)",
+    "placeholders": {
+      "buffer": { "content": "$1" }
+    }
+  },
+  "liveBadgeUnmeasuredRealTime": { "message": "live (real time)" },
+  "timeJustNow": { "message": "just now" }
+}

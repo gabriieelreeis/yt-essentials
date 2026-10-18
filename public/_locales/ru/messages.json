@@ -1,0 +1,123 @@
+{
+  "extDescription": {
+    "message": "Сохраняет просмотренные видео, задаёт разрешение и субтитры, уменьшает задержку прямых трансляций и пропускает уже просмотренные видео на YouTube."
+  },
+  "watchedToggle": { "message": "Сохранять просмотренные видео" },
+  "watchedHint": {
+    "message": "Хранит название, канал, время просмотра, длительность, процент и даты для каждого просмотренного видео. Всё остаётся в этом браузере."
+  },
+  "qualityToggle": { "message": "Всегда задавать разрешение видео" },
+  "qualityLabel": { "message": "Разрешение" },
+  "qualityAuto": { "message": "Автоматически" },
+  "qualityHighest": { "message": "Наилучшее доступное" },
+  "qualityHint": {
+    "message": "Если у видео нет выбранного качества, используется лучшее качество ниже него."
+  },
+  "captionsToggle": { "message": "Включать субтитры" },
+  "captionsLabel": { "message": "Язык" },
+  "captionsHint": {
+    "message": "Использует автоматические субтитры на этом языке, если есть; иначе — субтитры от автора или перевод."
+  },
+  "liveDelayToggle": { "message": "Уменьшать задержку трансляций" },
+  "liveDelayBufferLabel": { "message": "Буфер" },
+  "liveDelayHintIntro": {
+    "message": "Действует только на прямые трансляции во время воспроизведения: если воспроизведение отстаёт от прямого эфира больше, чем на выбранный буфер, оно само ускоряется, пока не вернётся к цели."
+  },
+  "liveDelayRealTime": { "message": "Реальное время" },
+  "liveDelayRealTimeHint": {
+    "message": "Держится вплотную к краю прямого эфира. Выбирайте только при быстром и очень стабильном соединении, где сбой обернётся заметной паузой."
+  },
+  "liveDelay2s": { "message": "2 секунды" },
+  "liveDelay2sHint": {
+    "message": "Минимальный запас: сглаживает короткие сбои при быстром соединении, а задержка остаётся почти незаметной."
+  },
+  "liveDelay5s": { "message": "5 секунд" },
+  "liveDelay5sHint": {
+    "message": "Сбалансированный запас для среднего соединения: воспроизведение плавнее, а задержка всё ещё заметно меньше обычной для YouTube."
+  },
+  "liveDelay10s": { "message": "10 секунд" },
+  "liveDelay10sHint": {
+    "message": "Дополнительный запас для медленного или нестабильного соединения: меньше всего рывков, но самая большая задержка из вариантов."
+  },
+  "skipToggle": { "message": "Кнопка «Следующее видео»" },
+  "skipAutoToggle": { "message": "Пропускать автоматически" },
+  "skipHint": {
+    "message": "Для уже просмотренных видео (90% и больше) показывает поверх страницы кнопку перехода к следующему видео. При автоматическом пропуске переход происходит сам. Никогда не применяется к прямым трансляциям."
+  },
+  "debugToggle": { "message": "Журнал отладки" },
+  "debugHint": {
+    "message": "Выводит дополнительную информацию в консоль браузера. Полезно, когда что-то не работает."
+  },
+  "optionsSubtitle": { "message": "Настройки и история просмотренных видео" },
+  "toastSettingsSaved": { "message": "Настройки сохранены" },
+  "toastVideoRemoved": { "message": "Видео удалено" },
+  "confirmClear": {
+    "message": "Удалить всю историю просмотров (всего: $count$)? Это нельзя отменить.",
+    "placeholders": {
+      "count": { "content": "$1" }
+    }
+  },
+  "toastHistoryCleared": { "message": "История очищена" },
+  "toastExportDownloaded": { "message": "Экспорт загружен" },
+  "watchedVideosTitle": { "message": "Просмотренные видео" },
+  "videosSearchPlaceholder": { "message": "Поиск по названию или каналу" },
+  "exportJsonButton": { "message": "Экспорт JSON" },
+  "clearAllButton": { "message": "Очистить всё" },
+  "emptyWatched": {
+    "message": "Записанных видео пока нет. Посмотрите что-нибудь на YouTube и возвращайтесь."
+  },
+  "emptySearch": { "message": "Ничего не найдено по запросу." },
+  "loadMoreButton": { "message": "Показать ещё" },
+  "optionsTitle": { "message": "YT Essentials - Настройки" },
+  "videoUnknownChannel": { "message": "Канал неизвестен" },
+  "videoStats": {
+    "message": "$watched$ из $duration$ ($percent$%) - просмотрено $when$",
+    "placeholders": {
+      "watched": { "content": "$1" },
+      "duration": { "content": "$2" },
+      "percent": { "content": "$3" },
+      "when": { "content": "$4" }
+    }
+  },
+  "videoPlayCount": {
+    "message": "просмотров: $count$",
+    "placeholders": {
+      "count": { "content": "$1" }
+    }
+  },
+  "removeButton": { "message": "Удалить" },
+  "removeTitle": { "message": "Удалить из истории" },
+  "openOptionsButton": { "message": "Настройки и просмотры" },
+  "savedBadge": { "message": "Сохранено" },
+  "skipButton": { "message": "Следующее видео" },
+  "skipTooltip": {
+    "message": "Вы уже смотрели это видео ($percent$%)",
+    "placeholders": {
+      "percent": { "content": "$1" }
+    }
+  },
+  "staleNotice": {
+    "message": "Расширение YT Essentials обновилось - перезагрузите страницу, чтобы оно продолжало работать."
+  },
+  "liveBadgeBehind": {
+    "message": "отставание $delay$ с (буфер $buffer$ с)",
+    "placeholders": {
+      "delay": { "content": "$1" },
+      "buffer": { "content": "$2" }
+    }
+  },
+  "liveBadgeBehindRealTime": {
+    "message": "отставание $delay$ с (реальное время)",
+    "placeholders": {
+      "delay": { "content": "$1" }
+    }
+  },
+  "liveBadgeUnmeasured": {
+    "message": "в эфире (буфер $buffer$ с)",
+    "placeholders": {
+      "buffer": { "content": "$1" }
+    }
+  },
+  "liveBadgeUnmeasuredRealTime": { "message": "в эфире (реальное время)" },
+  "timeJustNow": { "message": "только что" }
+}

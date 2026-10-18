@@ -2,6 +2,8 @@
  * Shared data types. Kept in one file so every module agrees on the shapes.
  */
 
+import type { MessageKey } from './i18n';
+
 export type QualityValue =
   | 'auto'
   | 'tiny'
@@ -18,7 +20,10 @@ export type QualityValue =
 
 export interface QualityLevelOption {
   value: QualityValue;
+  /** Static label ("144p", "2160p (4K)"); resolution numbers need no translation. */
   label: string;
+  /** i18n key for labels that are words (e.g. "Highest available"). */
+  labelKey?: MessageKey;
 }
 
 export interface CaptionLanguageOption {
@@ -51,11 +56,12 @@ export type LiveDelayBuffer = 'real-time' | '2s' | '5s' | '10s';
 
 export interface LiveDelayOption {
   value: LiveDelayBuffer;
-  label: string;
+  /** i18n key for the option label shown in the settings UI. */
+  labelKey: MessageKey;
   /** Seconds of cushion kept behind the live edge (0 = real time). */
   seconds: number;
-  /** Connection-oriented explanation shown in the settings UI. */
-  hint: string;
+  /** i18n key for the connection-oriented explanation shown in the UI. */
+  hintKey: MessageKey;
 }
 
 export interface LiveDelaySettings {

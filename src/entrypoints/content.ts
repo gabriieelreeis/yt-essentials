@@ -19,6 +19,7 @@
 
 import { defineContentScript } from 'wxt/utils/define-content-script';
 import { ALREADY_WATCHED_PERCENT, DEFAULT_SETTINGS, STORAGE_KEYS } from '@/shared/constants';
+import { t } from '@/shared/i18n';
 import { logger } from '@/shared/logger';
 import { MESSAGE_CHANNEL, readExtensionMessage, type AdvanceMessage, type SettingsMessage } from '@/shared/messages';
 import { deepMerge, getSettings, getWatchedVideos, upsertWatchedVideo } from '@/shared/storage';
@@ -370,8 +371,8 @@ export default defineContentScript({
       const button = document.createElement('button');
       button.type = 'button';
       button.id = SKIP_BUTTON_ID;
-      button.textContent = 'Next video';
-      button.title = `You already watched this video (${previousPercent}%)`;
+      button.textContent = t('skipButton');
+      button.title = t('skipTooltip', [String(previousPercent)]);
 
       button.addEventListener('click', (event) => {
         // Never leak the click to YouTube's handlers (inside the player it
@@ -476,10 +477,21 @@ export default defineContentScript({
     }
 
     function renderLiveStatus(badge: HTMLDivElement, status: LiveStatusSnapshot): void {
-      const buffer = status.bufferSeconds > 0 ? `buffer ${status.bufferSeconds}s` : 'real time';
-      const delay = status.delaySeconds === null ? 'live' : `${status.delaySeconds.toFixed(1)}s behind`;
-      const catchUp = status.catchingUp ? ` · ${status.catchUpRate}x` : '';
-      const text = `${delay} (${buffer})${catchUp}`;
+      const hasBuffer = status.bufferSeconds > 0;
+      let text: string;
+      if (status.delaySeconds === null) {
+        text = hasBuffer
+          ? t('liveBadgeUnmeasured', [String(status.bufferSeconds)])
+          : t('liveBadgeUnmeasuredRealTime');
+      } else if (hasBuffer) {
+        text = t('liveBadgeBehind', [
+          status.delaySeconds.toFixed(1),
+          String(status.bufferSeconds)
+        ]);
+      } else {
+        text = t('liveBadgeBehindRealTime', [status.delaySeconds.toFixed(1)]);
+      }
+      if (status.catchingUp) text += ` · ${status.catchUpRate}x`;
       if (badge.textContent !== text) badge.textContent = text;
       badge.classList.toggle('yte-catching-up', status.catchingUp);
     }
@@ -524,7 +536,7 @@ export default defineContentScript({
       if (document.getElementById(STALE_NOTICE_ID)) return;
       const notice = document.createElement('div');
       notice.id = STALE_NOTICE_ID;
-      notice.textContent = 'YT Essentials was updated - reload this page to keep it working.';
+      notice.textContent = t('staleNotice');
       (document.body ?? document.documentElement).append(notice);
       // Plain window.setTimeout: ctx timers never fire once invalidated.
       window.setTimeout(() => notice.remove(), STALE_NOTICE_MS);
