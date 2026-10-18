@@ -6,9 +6,9 @@
 > Se uma decisão relevante for tomada que não esteja aqui, escreva aqui — do
 > contrário, o próximo agente vai perder o contexto.
 
-Última atualização: 2026-10-18 — v0.5.0 (botão "Next video" virou overlay da
-página, avanço com fallback pela API do player e aviso visível de contexto
-inválido; compilação e build verificados, QA manual no YouTube pendente).
+Última atualização: 2026-10-18 — v0.7.0 (delay de lives com catch-up por
+**aceleração do próprio player** e indicador no player com o buffer e o tempo
+atrás da borda; compilação e build verificados, QA manual no YouTube pendente).
 
 ---
 
@@ -18,7 +18,7 @@ inválido; compilação e build verificados, QA manual no YouTube pendente).
 acontece no YouTube e melhora a experiência do usuário. Repositório:
 `yt-essentials`.
 
-Escopo da v0.5.0 (exatamente estas quatro funcionalidades, nada mais):
+Escopo da v0.6.0 (exatamente estas cinco funcionalidades, nada mais):
 
 1. **Salvar vídeos assistidos** — grava localmente título, canal, tempo assistido,
    duração, porcentagem, contagem de reproduções e datas de cada vídeo assistido.
@@ -31,7 +31,15 @@ Escopo da v0.5.0 (exatamente estas quatro funcionalidades, nada mais):
    priorizando a faixa **gerada automaticamente (ASR)**; se não existir, usa a
    legenda humana no idioma; se também não existir, usa a tradução de qualquer
    faixa para o idioma escolhido.
-4. **Pular vídeos já assistidos** — ao abrir um vídeo cujo registro anterior
+4. **Reduzir o delay de lives** — mantém a reprodução de transmissões ao vivo
+   perto da borda, com **buffer configurável** (tempo real, 2 s, 5 s ou
+   10 s = quanto a reprodução pode ficar atrás da borda) e informativo de
+   conexão por buffer no popup/options. Quando o delay passa do buffer, a
+   reprodução **acelera pelo próprio player** (1.5x) até voltar ao alvo e
+   retoma a velocidade normal; um **indicador dentro do player** mostra o
+   buffer e o tempo atrás da borda (visível até em tela cheia). Só age em
+   lives, enquanto o vídeo está rodando. Detalhes na seção 5.7.
+5. **Pular vídeos já assistidos** — ao abrir um vídeo cujo registro anterior
    tenha `percent >= ALREADY_WATCHED_PERCENT` (90), aparece um botão flutuante
    "Next video" no canto inferior esquerdo **da página** (overlay fixo, por cima
    de todo o conteúdo). O clique usa o botão "próximo" nativo do YouTube
@@ -85,7 +93,7 @@ tools/make-icons.ps1        # regera os ícones (PowerShell + System.Drawing)
 src/
   entrypoints/              # ← única pasta escaneada pelo WXT como entrypoints
     content.ts              # content script ISOLATED (storage + navegação + gravação + botão de pular)
-    main-world.content.ts   # content script MAIN world (API do player)
+    main-world.content.ts   # content script MAIN world (API do player: qualidade, legendas, delay de lives)
     popup/index.html        # entrypoint do popup (WXT nomeia pelo diretório)
     popup/main.tsx          # bootstrap React do popup
     popup/PopupApp.tsx      # componente raiz do popup
@@ -145,6 +153,7 @@ Adicionar um campo em `DEFAULT_SETTINGS` (`src/shared/constants.ts`) + no tipo
   "watched":  { "enabled": true, "minSeconds": 5, "maxEntries": 2000 },
   "quality":  { "enabled": false, "value": "hd1080" },
   "captions": { "enabled": false, "language": "en" },
+  "liveDelay": { "enabled": false, "buffer": "2s" },
   "skip":     { "enabled": true, "autoSkip": false }
 }
 ```
@@ -198,9 +207,10 @@ ajuste os tipos, adicione a migração em `storage.ts` e documente na seção 13
 
 Este é o ponto mais importante do projeto:
 
-- O controle de resolução e legendas do YouTube usa métodos internos do elemento
-  `#movie_player` (`getAvailableQualityLevels()`, `setPlaybackQualityRange()`,
-  `setOption()`, `loadModule()`).
+- O controle de resolução, legendas e delay de lives do YouTube usa métodos
+  internos do elemento `#movie_player` (`getAvailableQualityLevels()`,
+  `setPlaybackQualityRange()`, `setOption()`, `loadModule()`,
+  `getProgressState()`, `setPlaybackRate()`).
 - Content scripts rodam em um **mundo isolado**: eles enxergam o DOM, mas **não
   enxergam propriedades JavaScript criadas pela página**. Ou seja,
   `document.getElementById('movie_player').setPlaybackQualityRange` é
@@ -218,6 +228,7 @@ Este é o ponto mais importante do projeto:
 │  • lê settings do chrome.storage.local                                 │
 │  • detecta navegação SPA e grava vídeos assistidos                     │
 │  • mostra o botão "Next video" (overlay fixo da página)                │
+│  • desenha o indicador de delay de lives no player                     │
 │  • postMessage({type:'settings'})  ──────────┐                         │
 │  • responde {type:'request-settings'}  ◄──┐  │                         │
 │  • postMessage({type:'advance'})   ──────────┼──────────┐              │
@@ -227,6 +238,8 @@ Este é o ponto mais importante do projeto:
 │ src/entrypoints/main-world.content.ts     ▼  │          ▼              │
 │  • guarda o snapshot de settings          ◄──┘                         │
 │  • aplica resolução e legendas no #movie_player                        │
+│  • reduz o delay de lives (acelera 1.5x até o alvo)                    │
+│  • publica {type:'live-status'} (badge no player)                      │
 │  • atende {type:'advance'} → player.nextVideo()                        │
 └────────────────────────────────────────────────────────────────────────┘
 ```
@@ -236,14 +249,20 @@ settings (`request-settings`) e `content.ts` também empurra os settings assim
 que o `storage.getSettings()` resolve — a mensagem perdida no handshake é
 coberta pelo push, então não há corrida real.
 
+Além disso, o `main-world` publica `{type:'live-status'}` a cada 1 s enquanto a
+opção de live delay estiver ligada numa live (buffer atual, delay em relação à
+borda e se está acelerando); o `content.ts` usa esses dados para desenhar o
+badge dentro do player e o esconde quando eles param de chegar (recurso
+desligado, saiu da live, VOD).
+
 ### 5.2 Fluxo: configurações
 
 UI React (popup/options) → `useSettings().update(patch)` →
 `storage.updateSettings(patch)` → `chrome.storage.local` →
-`chrome.storage.onChanged` dispara no `content.ts` → ele atualiza o snapshot e
-empurra para o `main-world`, que re-aplica no player na hora (sem reload da
-página). **Não existe service worker** — toda a reatividade é feita por
-`storage.onChanged`.
+`chrome.storage.onChanged` dispara no `content.ts` → ele atualiza o snapshot
+(resolução, legendas e live delay) e empurra para o `main-world`, que re-aplica
+no player na hora (sem reload da página). **Não existe service worker** — toda a
+reatividade é feita por `storage.onChanged`.
 
 ### 5.3 Fluxo: gravação de vídeos assistidos (content.ts)
 
@@ -362,6 +381,51 @@ página). **Não existe service worker** — toda a reatividade é feita por
   "recarreguei a extensão e nada funciona nesta aba".
 - **Tooltip:** `You already watched this video (N%)` com o percentual anterior.
 
+### 5.7 Fluxo: redução do delay de lives (main-world.content.ts)
+
+- **Configuração:** `settings.liveDelay.enabled` (default **false**) e
+  `settings.liveDelay.buffer` (default `"2s"`). Opções em `LIVE_DELAY_OPTIONS`
+  (`constants.ts`): `real-time` (0 s), `2s`, `5s`, `10s` — o número é o
+  "colchão" tolerado atrás da borda ao vivo; cada opção tem um informativo de
+  conexão exibido no popup/options. Desligado por padrão: recurso que mexe na
+  reprodução via APIs internas é opt-in (como resolução/legendas).
+- **Loop:** `checkLiveDelay()` roda a cada 1 s (`LIVE_DELAY_CHECK_INTERVAL_MS`)
+  no main world desde o boot — não depende de eventos e não faz nada quando o
+  recurso está desligado.
+- **Medição:** `liveEdgeDelay(progress)` (`youtube-player.ts`) = `seekableEnd −
+  current`, em segundos. É o único sinal usado (não dá para confiar em
+  `getDuration()` em lives).
+- **Ação (aceleração, não seek):** com o player **playing**, sem anúncio
+  (`ad-showing`) e numa live, quando `delay > buffer + LIVE_DELAY_TOLERANCE_S`
+  (1,5 s) chama `player.setPlaybackRate(LIVE_CATCH_UP_RATE)` (1.5x; fallback
+  `video.playbackRate` se a API não existir) e mantém a aceleração até
+  `delay <= buffer + LIVE_DELAY_STOP_MARGIN_S` (0,5 s — histerese que evita
+  liga/desliga a cada tick), quando restaura a velocidade anterior. A 1.5x o
+  delay fecha 0,5 s por segundo: um atraso de D segundos além do alvo leva
+  ~2×D segundos para convergir. Pausado/buffering desliga a aceleração (e
+  restaura a velocidade); ao dar play, ela volta em ≤1 s se ainda estiver atrás.
+- **Velocidade do usuário:** a velocidade anterior é capturada ao acelerar e
+  restaurada ao terminar; se o usuário mudar a velocidade manualmente no meio
+  (valor diferente de 1.5x), a extensão não sobrescreve.
+- **Indicador no player (badge):** a cada verificação o main world publica
+  `{type:'live-status'}` (buffer, delay, `catchingUp`, taxa) e o `content.ts`
+  desenha `#yte-live-status` **dentro do `#movie_player`** (canto superior
+  direito, `pointer-events: none`) — visível também em **tela cheia**, ao
+  contrário do overlay do botão "Next video". Texto:
+  `12.3s behind (buffer 5s)` ou `... (real time)` e ` · 1.5x` enquanto acelera.
+  O badge some quando o status fica velho (>5 s sem publicação: recurso
+  desligado, saiu da live, VOD). Estilo em `skip-button.css` (id espelhado em
+  `LIVE_STATUS_ID` no `content.ts`).
+- **Diagnóstico (Debug ligado):** `live delay: catching up`
+  (`{ delaySeconds, bufferSeconds, rate }`), `live delay: catch-up finished`
+  (`{ delaySeconds, restoredRate }`) e **uma** linha por vídeo+motivo quando
+  não dá para medir (`cannot measure the live delay`).
+- **Limitações:** precisa que o player exponha `getProgressState()`; lives sem
+  DVR não têm atraso real para recuperar (o recurso fica inerte). Não muda a
+  latência de transmissão do streamer, só mantém o player na borda que o
+  YouTube entrega. Em aba oculta o Chrome throttla timers (~1×/min após um
+  tempo): a aceleração já ligada continua, só as decisões ficam mais espaçadas.
+
 ---
 
 ## 6. Decisões técnicas registradas
@@ -391,6 +455,11 @@ página). **Não existe service worker** — toda a reatividade é feita por
 | Auto-skip com atraso de 1,5s (`AUTO_SKIP_DELAY_MS`) em vez de instantâneo | O pulo instantâneo confundiria ("o vídeo mudou sozinho antes de eu ver"); com o atraso o botão aparece, o usuário entende e ainda pode clicar/pausar antes. Constante única para calibrar. |
 | Auto-skip **uma vez por vídeo** (`advanceHandledFor`) | Impede loop se o clique no próximo não navegar, evita pulsar de novo se o usuário voltar de propósito para o mesmo vídeo e ainda permite pular vários vídeos já assistidos em sequência (playlist). |
 | `skip.enabled`/`skip.autoSkip` como sub-opção desabilitada na UI | Coerência visual: com o toggle principal desligado, "Skip automatically" fica cinza (`Toggle` já suportava `disabled`; `className="sub"` só indenta). |
+| Delay de lives por **aceleração** (`player.setPlaybackRate`, 1.5x) até o alvo, não por seek | Escolha explícita do usuário: sem "teleporte" de conteúdo, a reprodução acelera até a borda como um ajuste de velocidade do próprio player. Trade-off: converge a 0,5 s/s (um atraso D além do alvo leva ~2×D s) e o badge mostra `1.5x` durante o catch-up. |
+| Buffer de live como **teto tolerado** com histerese: acelera em `buffer + 1,5 s`, para em `buffer + 0,5 s` | Evita liga/desliga da aceleração a cada oscilação; estar mais perto da borda que o buffer é bom e não deve gerar ação. As duas margens são constantes calibráveis (`LIVE_DELAY_TOLERANCE_S`/`LIVE_DELAY_STOP_MARGIN_S`). |
+| Live delay **desligado por padrão** | Recursos que mexem na reprodução via APIs internas são opt-in no projeto (como resolução/legendas) — e ainda não houve QA manual em navegador real. |
+| Sincronia de live só com o player **playing** (state 1, sem `ad-showing`) | Nunca tirar o usuário de uma pausa nem competir com buffering/anúncio; a aceleração é desligada (e a velocidade restaurada) ao pausar e volta em ≤1 s ao dar play. |
+| Indicador de delay **dentro do `#movie_player`** (não overlay da página) | Pedido do usuário para ver buffer e tempo atrás; dentro do player ele aparece também em **tela cheia** (onde o overlay do botão "Next video" não aparece). Dados via `{type:'live-status'}`; CSS no arquivo compartilhado e DOM no `content.ts`. |
 
 ---
 
@@ -403,6 +472,21 @@ página). **Não existe service worker** — toda a reatividade é feita por
   temporariamente durante anúncios/buffering — o re-apply cobre a maioria.
 - Legenda ASR só existe se o YouTube tiver gerado para aquele vídeo; sem faixa
   alguma, nenhuma legenda é forçada.
+- Lives: a extensão reduz o delay **do player** (mantém a reprodução na borda
+  ao vivo dentro do buffer escolhido), não a latência de transmissão
+  (ingest/processamento do YouTube — no modo "normal latency" o delay real do
+  stream continua). Lives sem janela DVR não têm o que reposicionar (o recurso
+  não age).
+- O catch-up de lives usa APIs internas (`getProgressState()`,
+  `getPlayerState()`, `setPlaybackRate()`): se o YouTube mudar, o recurso para
+  de agir em silêncio (nada quebra). A aceleração leva tempo para convergir
+  (fecha 0,5 s por segundo; ~2×D s para um atraso D além do alvo) — foi escolha
+  do usuário em vez do "pulo" por seek. Com o recurso ligado, pausar/voltar no
+  DVR é recuperado quando a reprodução retoma — é o comportamento pretendido
+  ("sempre perto do ao vivo"); para assistir atrás, desligue o toggle.
+- Em aba oculta o Chrome throttla os timers: as verificações do delay de live
+  ficam mais espaçadas (a aceleração já ligada continua valendo), voltando ao
+  ritmo normal quando a aba fica visível.
 - O histórico é local: limpar dados da extensão (`chrome://extensions` →
   dados) apaga tudo. Export JSON é o escape.
 - Lives (`duration = Infinity`) salvam progresso mas `percent` fica 0.
@@ -489,6 +573,16 @@ Checklist manual de QA (rodar antes de considerar uma mudança concluída):
       para a melhor abaixo).
 - [ ] Ativar legendas (ex.: Português) em vídeo com ASR em PT: legenda aparece
       ligada. Testar vídeo sem faixa PT (deve traduzir, se houver tradução).
+- [ ] Ligar **Reduce live delay** com buffer de 5 s numa live: o badge no canto
+      superior direito **do player** mostra `X.Xs behind (buffer 5s)`
+      atualizando ~1×/s; pausar ~1 min e voltar: a reprodução acelera (badge
+      `· 1.5x`), converge para o buffer e a velocidade volta a 1x (Debug mostra
+      `live delay: catching up` e `catch-up finished`).
+- [ ] Entrar em **tela cheia** com o badge visível (deve continuar aparecendo);
+      trocar de vídeo/sair da live: o badge some em ≤5 s.
+- [ ] Buffer **Real time**: fica colado na borda (pode pausar/travar em conexão
+      instável — é o esperado). Com o toggle desligado e em VODs: nada acontece
+      (sem aceleração, sem badge, sem linha de ação no debug).
 - [ ] Desligar tudo nos toggles e confirmar que nada mais é aplicado/gravado.
 - [ ] Vídeo já assistido: assistir um vídeo até o fim (≥ 90%), abrir outro e
       voltar. O botão **Next video** aparece no canto inferior esquerdo **da
@@ -654,20 +748,23 @@ do bloqueador.
 
 ## 12. Estado atual
 
-- Versão: **0.5.0** (`package.json`), sem publicação na Chrome Web Store.
+- Versão: **0.7.0** (`package.json`), sem publicação na Chrome Web Store.
 - v0.2.0 (WXT + Vite + React + TypeScript) concluída e verificada; v0.3.0
   adicionou o botão "Next video"; v0.4.0 o tornou configurável com o
   "pular sozinho"; v0.4.1 tratou o "Extension context invalidated"; v0.5.0
   transformou o botão em overlay da página, removeu a checagem de
   disponibilidade que causava falso negativo (relatado com vídeo 99% assistido),
-  adicionou fallback `player.nextVideo()` e um aviso visível de contexto inválido.
-- **Verificado em v0.5.0:** `npm run compile` limpo; `npm run build` OK
-  (`content-scripts/content.css` com `position: fixed`/`z-index` do overlay,
-  presente no manifest apenas do content script isolado; `main-world.js` com
-  `nextVideo()` e sem `chrome.*`); manifest na versão 0.5.0.
+  adicionou fallback `player.nextVideo()` e um aviso visível de contexto
+  inválido; v0.6.0 adicionou a **redução do delay de lives** com buffer
+  configurável; v0.7.0 trocou o catch-up por **aceleração do próprio player**
+  (1.5x) e adicionou o **indicador de delay dentro do player** (seção 5.7).
+- **Verificado em v0.7.0:** `npm run compile` limpo; `npm run build` OK
+  (`main-world.js` com `setPlaybackRate`/`live-status`/loop de 1 s e sem
+  `chrome.*`; `content.js` com o badge `#yte-live-status`; CSS do badge no
+  manifest; manifest na versão 0.7.0).
 - **Pendente: validação manual no YouTube** (checklist da seção 8 nunca foi
   executado em navegador real — inclui botão, auto-skip, fallback, logs de
-  estado e o aviso de contexto inválido).
+  estado, aviso de contexto inválido e agora o delay de lives e o badge).
 - A v0.1.0 (vanilla JS, sem build) foi substituída pela v0.2.0; o histórico
   está no registro abaixo.
 
@@ -677,6 +774,8 @@ do bloqueador.
 
 | Data | Versão | Mudança |
 | --- | --- | --- |
+| 2026-10-18 | 0.7.0 | Delay de lives v2: catch-up por **aceleração do próprio player** (`setPlaybackRate(1.5)`, fallback `video.playbackRate`) em vez de seek, mantendo até `buffer + 0,5 s` e restaurando a velocidade anterior (e respeitando mudança manual do usuário); loop passou a 1 s. Novo **badge `#yte-live-status` dentro do `#movie_player`** (canto superior direito, visível também em tela cheia) com `X.Xs behind (buffer Ns) · 1.5x`, alimentado pela mensagem `{type:'live-status'}` publicada pelo main world (novo `LiveStatusMessage` em `messages.ts`); some após 5 s sem dados ou com o recurso desligado. `seekTo` removido do tipo do player; CSS do badge em `skip-button.css`; `content.ts` agora recebe mensagens do main world e desenha o badge. Verificado: type-check limpo, build OK, manifest 0.7.0. QA manual pendente. |
+| 2026-10-18 | 0.6.0 | Nova função **reduzir o delay de lives** (`settings.liveDelay`, default desligado, buffer default `2s`). No main world, `checkLiveDelay()` roda a cada 2 s e, em live reproduzindo, mede `seekableEnd − current` via `getProgressState()`; quando o delay passa de `buffer + 1,5 s`, chama `player.seekTo(seekableEnd − buffer)` (catch-up por seek, sem mudar a velocidade; pausado/buffering/anúncio nunca é tocado). Buffers: tempo real (0 s), 2 s, 5 s e 10 s, cada um com informativo de conexão no popup/options (`LIVE_DELAY_OPTIONS`). Campo aditivo (sem bump de `SCHEMA_VERSION`), `PlayerSettings`/`main-world` atualizados, card novo em `FeaturesSettings.tsx`, `package.json`/descrição/README/docs atualizados. Verificado: type-check limpo, build OK, manifest 0.6.0. QA manual pendente. |
 | 2026-10-18 | 0.5.0 | (docs, sem mudança de código) Refino da nota de diagnóstico da seção 8 com a análise de um console real com adblock: `ERR_BLOCKED_BY_CLIENT` na sonda de conectividade `/generate_204` (suspeito principal da tela de offline), telemetria bloqueada sem impacto (`log_event`, `api/stats/qoe`, `/ptracking`, `pagead/lvz`) e `403` de `youtubei/v1/search|browse|get_watch` que vinham da extensão YoutubeAntiTranslate — não do bloqueador. Exceções mínimas sugeridas (`@@||www.youtube.com/generate_204`, `@@||i.ytimg.com/generate_204` e, se aplicável, `@@||www.youtube.com/youtubei/v1/browse$xmlhttprequest`). |
 | 2026-10-18 | 0.5.0 | (docs, sem mudança de código) Nota de diagnóstico nas seções 7/8 para a tela "Conecte-se à Internet" do YouTube com adblock: é filtro de terceiros bloqueando `www.youtube.com/youtubei/v1/browse`, não a extensão (que não faz requisições de rede). Inclui como confirmar no DevTools, achar a regra no log do bloqueador e criar a exceção. |
 | 2026-10-18 | 0.5.0 | Correção do falso negativo relatado ("vídeo 99% assistido e o botão não aparece") e mudança de posição pedida pelo usuário. Botão virou **overlay da página** (`position: fixed`, `left/bottom: 12px`, `z-index: 2147483647`, anexado ao `document.body`) em vez de elemento absoluto dentro de `#movie_player`. Visibilidade ficou **permissiva** (`skipState()` não exige mais achar `.ytp-next-button`); Shorts continuam sem botão (motivo `shorts page`); avanço com **fallback**: clique no botão nativo e, se ausente, mensagem `advance` → main world chama `player.nextVideo()` (novo `AdvanceMessage` em messages.ts, `nextVideo?` no tipo do player, tratamento no main-world). Diagnóstico: `logSkipState()` (uma linha debug por mudança, com motivo) e aviso visível `#yte-stale-notice` (15s, `pointer-events: none`) quando o contexto da extensão morre. Verificado: type-check limpo, build OK, manifest 0.5.0, CSS com overlay fixo, main-world com `nextVideo`. QA manual pendente. |

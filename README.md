@@ -1,6 +1,6 @@
 # YT Essentials
 
-Extensão do Chrome (Manifest V3) que adiciona quatro recursos ao YouTube:
+Extensão do Chrome (Manifest V3) que adiciona cinco recursos ao YouTube:
 
 - **Salvar vídeos assistidos** — histórico local com título, canal, tempo assistido,
   porcentagem e datas (busca, remoção, limpeza e export JSON na página de opções).
@@ -9,6 +9,12 @@ Extensão do Chrome (Manifest V3) que adiciona quatro recursos ao YouTube:
 - **Ativar legendas automaticamente** — liga a legenda no idioma escolhido,
   priorizando a faixa gerada automaticamente (ASR) e caindo para tradução quando
   necessário.
+- **Reduzir o delay de lives** — mantém a transmissão ao vivo o mais perto
+  possível da borda, com buffer configurável de **tempo real, 2 s, 5 s ou 10 s**
+  (cada opção explica para qual tipo de conexão ela serve). Quando o atraso passa
+  do buffer, a reprodução acelera sozinha (1.5x) até voltar ao alvo, e um
+  indicador no player mostra o buffer e o tempo atrás da borda (visível também
+  em tela cheia). Só age em lives, e só enquanto o vídeo está rodando.
 - **Pular vídeos já assistidos** — ao reabrir um vídeo que você já assistiu
   (≥ 90%), surge um botão **Next video** no canto inferior esquerdo da página
   (por cima de todo o conteúdo) que avança para o próximo vídeo (playlist ou
@@ -46,8 +52,8 @@ Para carregar manualmente: `chrome://extensions` → **Modo do desenvolvedor** �
 ## Uso
 
 - **Popup** (ícone da extensão): ligar/desligar as funcionalidades configuráveis
-  e escolher resolução e idioma das legendas. Alterações aplicam na hora, sem
-  recarregar a página do YouTube.
+  e escolher resolução, idioma das legendas e o buffer das lives. Alterações
+  aplicam na hora, sem recarregar a página do YouTube.
 - **Página de opções** (botão `Settings & watched list` no popup): as mesmas
   configurações, log de depuração e o histórico de vídeos assistidos.
 
@@ -73,5 +79,6 @@ qualquer coisa.**
 ## Avisos
 
 - Todos os dados ficam apenas no seu navegador (`chrome.storage.local`).
-- A extensão usa APIs internas do player do YouTube para resolução e legendas;
-  elas podem mudar sem aviso (o código é defensivo, mas pode quebrar eventualmente).
+- A extensão usa APIs internas do player do YouTube para resolução, legendas e
+  o delay das lives; elas podem mudar sem aviso (o código é defensivo, mas pode
+  quebrar eventualmente).

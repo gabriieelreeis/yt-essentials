@@ -1,6 +1,6 @@
 import { Toggle } from '@/components/Toggle';
-import { CAPTION_LANGUAGES, QUALITY_LEVELS } from '@/shared/constants';
-import type { DeepPartial, QualityValue, Settings } from '@/shared/types';
+import { CAPTION_LANGUAGES, LIVE_DELAY_OPTIONS, QUALITY_LEVELS } from '@/shared/constants';
+import type { DeepPartial, LiveDelayBuffer, QualityValue, Settings } from '@/shared/types';
 
 interface FeaturesSettingsProps {
   settings: Settings;
@@ -14,6 +14,10 @@ interface FeaturesSettingsProps {
  * surfaces can never drift apart.
  */
 export function FeaturesSettings({ settings, onChange, showDebug = false }: FeaturesSettingsProps) {
+  const liveDelayOption = LIVE_DELAY_OPTIONS.find(
+    (option) => option.value === settings.liveDelay.buffer
+  );
+
   return (
     <>
       <section className="card">
@@ -79,6 +83,35 @@ export function FeaturesSettings({ settings, onChange, showDebug = false }: Feat
         <p className="hint">
           Uses the auto-generated track of that language when available, falling back to human
           captions or a translated track.
+        </p>
+      </section>
+
+      <section className="card">
+        <Toggle
+          checked={settings.liveDelay.enabled}
+          onChange={(enabled) => onChange({ liveDelay: { enabled } })}
+          label="Reduce live delay"
+        />
+        <div className="row">
+          <label htmlFor="live-delay-buffer">Buffer</label>
+          <select
+            id="live-delay-buffer"
+            value={settings.liveDelay.buffer}
+            disabled={!settings.liveDelay.enabled}
+            onChange={(event) =>
+              onChange({ liveDelay: { buffer: event.target.value as LiveDelayBuffer } })
+            }
+          >
+            {LIVE_DELAY_OPTIONS.map(({ value, label }) => (
+              <option key={value} value={value}>
+                {label}
+              </option>
+            ))}
+          </select>
+        </div>
+        <p className="hint">
+          Only affects live streams, while they are playing: playback is dragged back whenever it
+          drifts more than the chosen buffer behind the live edge. {liveDelayOption?.hint}
         </p>
       </section>
 

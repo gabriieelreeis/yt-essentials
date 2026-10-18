@@ -27,7 +27,30 @@ export interface AdvanceMessage {
   type: 'advance';
 }
 
-export type ExtensionMessage = SettingsMessage | RequestSettingsMessage | AdvanceMessage;
+/**
+ * Live-delay data published by the MAIN world on every check, while the
+ * option is on and a live stream is playing. The isolated world uses it to
+ * draw the badge inside the player; when messages stop arriving the badge
+ * goes away.
+ */
+export interface LiveStatusMessage {
+  channel: typeof MESSAGE_CHANNEL;
+  type: 'live-status';
+  /** Buffer chosen in the settings, in seconds (0 = real time). */
+  bufferSeconds: number;
+  /** Seconds playback sits behind the live edge; null when unmeasurable. */
+  delaySeconds: number | null;
+  /** True while playback is accelerated to catch up. */
+  catchingUp: boolean;
+  /** Playback rate used while catching up (informative). */
+  catchUpRate: number;
+}
+
+export type ExtensionMessage =
+  | SettingsMessage
+  | RequestSettingsMessage
+  | AdvanceMessage
+  | LiveStatusMessage;
 
 /** Narrowing helper for message events; returns null for foreign messages. */
 export function readExtensionMessage(data: unknown): ExtensionMessage | null {
@@ -37,7 +60,8 @@ export function readExtensionMessage(data: unknown): ExtensionMessage | null {
   if (
     candidate.type === 'settings' ||
     candidate.type === 'request-settings' ||
-    candidate.type === 'advance'
+    candidate.type === 'advance' ||
+    candidate.type === 'live-status'
   ) {
     return data as ExtensionMessage;
   }

@@ -1,4 +1,4 @@
-import type { CaptionLanguageOption, QualityLevelOption, Settings } from './types';
+import type { CaptionLanguageOption, LiveDelayOption, QualityLevelOption, Settings } from './types';
 
 export const APP_NAME = 'YT Essentials';
 export const SCHEMA_VERSION = 1;
@@ -37,6 +37,10 @@ export const DEFAULT_SETTINGS: Settings = {
   captions: {
     enabled: false,
     language: 'en'
+  },
+  liveDelay: {
+    enabled: false,
+    buffer: '2s'
   },
   skip: {
     enabled: true,
@@ -92,3 +96,44 @@ export const CAPTION_LANGUAGES: readonly CaptionLanguageOption[] = [
   { code: 'ro', name: 'Romanian' },
   { code: 'hu', name: 'Hungarian' }
 ];
+
+/**
+ * Live-delay buffers: how far behind the live edge playback is allowed to sit.
+ * The numeric part is the cushion; each hint explains which connection profile
+ * the buffer is for (shown under the select in the popup/options).
+ */
+export const LIVE_DELAY_OPTIONS: readonly LiveDelayOption[] = [
+  {
+    value: 'real-time',
+    label: 'Real time',
+    seconds: 0,
+    hint: 'Stays glued to the live edge. Pick it only with a fast and very stable connection, where a hiccup would become a visible pause.'
+  },
+  {
+    value: '2s',
+    label: '2 seconds',
+    seconds: 2,
+    hint: 'Tiny cushion: absorbs short hiccups on fast connections while the delay stays almost imperceptible.'
+  },
+  {
+    value: '5s',
+    label: '5 seconds',
+    seconds: 5,
+    hint: 'Balanced cushion for average connections: smoother playback, with a delay still clearly below YouTube\'s usual drift.'
+  },
+  {
+    value: '10s',
+    label: '10 seconds',
+    seconds: 10,
+    hint: 'Extra cushion for slow or unstable connections: the lowest chance of stutter, with the largest delay of the options.'
+  }
+];
+
+/** Cadence of the live-delay check in the MAIN world. */
+export const LIVE_DELAY_CHECK_INTERVAL_MS = 1000;
+/** Start catching up when the delay exceeds the buffer by this much. */
+export const LIVE_DELAY_TOLERANCE_S = 1.5;
+/** While catching up, stop when the delay is back within buffer + this margin. */
+export const LIVE_DELAY_STOP_MARGIN_S = 0.5;
+/** Playback rate used to catch up to the live target (closes the delay at rate−1 per second). */
+export const LIVE_CATCH_UP_RATE = 1.5;

@@ -42,6 +42,28 @@ export interface CaptionsSettings {
   language: string;
 }
 
+/**
+ * How far behind the live edge playback may sit. `real-time` is the smallest
+ * possible delay; the numeric options are safety cushions for connections
+ * that cannot hold the edge without stuttering.
+ */
+export type LiveDelayBuffer = 'real-time' | '2s' | '5s' | '10s';
+
+export interface LiveDelayOption {
+  value: LiveDelayBuffer;
+  label: string;
+  /** Seconds of cushion kept behind the live edge (0 = real time). */
+  seconds: number;
+  /** Connection-oriented explanation shown in the settings UI. */
+  hint: string;
+}
+
+export interface LiveDelaySettings {
+  /** Keeps live playback close to the live edge (live streams only). */
+  enabled: boolean;
+  buffer: LiveDelayBuffer;
+}
+
 export interface SkipSettings {
   /** Shows the "Next video" button on already-watched videos. */
   enabled: boolean;
@@ -55,6 +77,7 @@ export interface Settings {
   watched: WatchedSettings;
   quality: QualitySettings;
   captions: CaptionsSettings;
+  liveDelay: LiveDelaySettings;
   skip: SkipSettings;
 }
 

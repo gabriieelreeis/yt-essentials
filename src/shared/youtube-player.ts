@@ -21,6 +21,25 @@ export const QUALITY_ORDER = [
   'highres'
 ] as const;
 
+export interface PlayerVideoData {
+  video_id?: string;
+  isLive?: boolean;
+}
+
+/**
+ * Snapshot returned by `player.getProgressState()`. On live streams
+ * `seekableEnd` is the live edge, in the same time scale as `current`.
+ */
+export interface PlayerProgressState {
+  current?: number;
+  duration?: number;
+  seekableStart?: number;
+  seekableEnd?: number;
+  isLive?: boolean;
+  isSeekable?: boolean;
+  isAtLiveHead?: boolean;
+}
+
 /**
  * The subset of the (undocumented) YouTube player API this extension uses.
  * Every member is optional: the API is internal and may disappear.
@@ -35,6 +54,14 @@ export interface YouTubePlayerElement extends HTMLElement {
   loadModule?: (moduleName: string) => void;
   /** Advances to the next video (same action as YouTube's next button). */
   nextVideo?: () => void;
+  /** Progress snapshot (current time, live edge, seekability). */
+  getProgressState?: () => PlayerProgressState | undefined;
+  /** Numeric player state (-1 unstarted, 1 playing, 2 paused, 3 buffering). */
+  getPlayerState?: () => number;
+  getVideoData?: () => PlayerVideoData | undefined;
+  /** Playback speed (1 = normal); lives catch up by raising this temporarily. */
+  getPlaybackRate?: () => number;
+  setPlaybackRate?: (rate: number) => void;
 }
 
 export interface CaptionTrackInfo {
@@ -56,11 +83,25 @@ export interface PlayerSettings {
   debug?: boolean;
   quality?: { enabled: boolean; value: string };
   captions?: { enabled: boolean; language: string };
+  liveDelay?: { enabled: boolean; buffer: string };
 }
 
 export function getPlayerElement(): YouTubePlayerElement | null {
   const element = document.getElementById('movie_player') ?? document.getElementById('shorts-player');
   return (element as YouTubePlayerElement | null) ?? null;
+}
+
+/**
+ * Seconds playback sits behind the live edge (`seekableEnd - current`).
+ * Returns null when the snapshot has no usable numbers; callers must make
+ * sure the stream is actually live before trusting the value.
+ */
+export function liveEdgeDelay(progress: PlayerProgressState | null | undefined): number | null {
+  if (!progress) return null;
+  const current = Number(progress.current);
+  const end = Number(progress.seekableEnd);
+  if (!Number.isFinite(current) || !Number.isFinite(end)) return null;
+  return Math.max(0, end - current);
 }
 
 export function qualityRank(quality: string): number {

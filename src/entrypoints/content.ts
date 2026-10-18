@@ -9,9 +9,12 @@
  *  3. Record watched videos into chrome.storage.local.
  *  4. Offer a "Next video" button over the page when the current video was
  *     already watched in a previous session (never on live streams).
+ *  5. Draw the live-delay badge inside the player (data published by the MAIN
+ *     world while the live-delay option is on).
  *
- * Quality/captions are intentionally NOT applied here: page-defined methods
- * of `#movie_player` are invisible from the isolated world.
+ * Quality/captions/live-delay control are intentionally NOT applied here:
+ * page-defined methods of `#movie_player` are invisible from the isolated
+ * world.
  */
 
 import { defineContentScript } from 'wxt/utils/define-content-script';
@@ -34,6 +37,10 @@ const SKIP_BUTTON_ID = 'yte-skip-button';
 /** Stale-context notice (see showStaleNotice); ids must match skip-button.css. */
 const STALE_NOTICE_ID = 'yte-stale-notice';
 const STALE_NOTICE_MS = 15000;
+/** Live-delay badge inside the player; id must match skip-button.css. */
+const LIVE_STATUS_ID = 'yte-live-status';
+/** Hide the live-delay badge when the MAIN world stops publishing for this long. */
+const LIVE_STATUS_STALE_MS = 5000;
 
 interface WatchSession {
   videoId: string;
@@ -51,6 +58,16 @@ interface WatchSession {
    * when the session starts, before this session's own autosaves can change it.
    */
   previousPercent: number | null;
+}
+
+/** Latest live-delay data published by the MAIN world (see checkLiveDelay there). */
+interface LiveStatusSnapshot {
+  bufferSeconds: number;
+  delaySeconds: number | null;
+  catchingUp: boolean;
+  catchUpRate: number;
+  /** When the snapshot arrived (used to drop stale data). */
+  at: number;
 }
 
 export default defineContentScript({
@@ -78,6 +95,10 @@ export default defineContentScript({
     let lastSkipLogKey: string | null = null;
     /** True after telling the user once that the extension was reloaded. */
     let contextInvalidatedLogged = false;
+    /** Latest live-delay snapshot from the MAIN world (badge data). */
+    let liveStatus: LiveStatusSnapshot | null = null;
+    /** Live-delay badge element inside the player, when shown. */
+    let liveStatusBadge: HTMLDivElement | null = null;
     let lastHref = location.href;
 
     void init();
@@ -145,7 +166,8 @@ export default defineContentScript({
       const playerSettings: PlayerSettings = {
         debug: settings.debug,
         quality: settings.quality,
-        captions: settings.captions
+        captions: settings.captions,
+        liveDelay: settings.liveDelay
       };
       const message: SettingsMessage = {
         channel: MESSAGE_CHANNEL,
@@ -155,11 +177,24 @@ export default defineContentScript({
       window.postMessage(message, '*');
     }
 
-    /** Answers the main-world script when it asks for the current settings. */
+    /** Handles main-world messages: settings requests and live-delay data. */
     function onWindowMessage(event: MessageEvent): void {
       if (event.source !== window) return;
       const message = readExtensionMessage(event.data);
-      if (message?.type === 'request-settings') pushSettingsToMainWorld();
+      if (!message) return;
+      if (message.type === 'request-settings') {
+        pushSettingsToMainWorld();
+        return;
+      }
+      if (message.type === 'live-status') {
+        liveStatus = {
+          bufferSeconds: message.bufferSeconds,
+          delaySeconds: message.delaySeconds,
+          catchingUp: message.catchingUp,
+          catchUpRate: message.catchUpRate,
+          at: Date.now()
+        };
+      }
     }
 
     // -----------------------------------------------------------------------
@@ -171,10 +206,13 @@ export default defineContentScript({
       if (!videoId) {
         persistSession(session);
         session = null;
+        // Live badge data belongs to the previous page/video.
+        liveStatus = null;
         return;
       }
       if (session && session.videoId === videoId) return;
       persistSession(session);
+      liveStatus = null;
       startSession(videoId);
     }
 
@@ -238,6 +276,7 @@ export default defineContentScript({
       const skip = skipState();
       updateSkipButton(skip);
       maybeAutoSkip(skip);
+      updateLiveStatus();
     }
 
     // -----------------------------------------------------------------------
@@ -392,6 +431,57 @@ export default defineContentScript({
         logger.debug('auto-skipping already watched video', videoId);
         advanceToNextVideo();
       }, AUTO_SKIP_DELAY_MS);
+    }
+
+    // -----------------------------------------------------------------------
+    // Live-delay badge
+    // -----------------------------------------------------------------------
+
+    /**
+     * Small badge drawn inside the player showing how far behind the live edge
+     * playback is and which buffer is configured. Data comes from the MAIN
+     * world (`live-status` messages); when those stop arriving (option off,
+     * left the live, VOD) the badge disappears. Living inside #movie_player
+     * makes it visible in fullscreen too.
+     */
+    function updateLiveStatus(): void {
+      const status = liveStatus;
+      if (
+        !status ||
+        Date.now() - status.at >= LIVE_STATUS_STALE_MS ||
+        !settings?.liveDelay.enabled
+      ) {
+        liveStatusBadge?.remove();
+        liveStatusBadge = null;
+        return;
+      }
+
+      const player =
+        document.getElementById('movie_player') ?? document.getElementById('shorts-player');
+      if (!player) return;
+
+      if (!liveStatusBadge || !liveStatusBadge.isConnected) {
+        liveStatusBadge = createLiveStatusBadge();
+      }
+      if (liveStatusBadge.parentElement !== player) player.append(liveStatusBadge);
+      renderLiveStatus(liveStatusBadge, status);
+    }
+
+    function createLiveStatusBadge(): HTMLDivElement {
+      const badge = document.createElement('div');
+      badge.id = LIVE_STATUS_ID;
+      // Informative overlay: must never steal a click from the player.
+      badge.setAttribute('aria-hidden', 'true');
+      return badge;
+    }
+
+    function renderLiveStatus(badge: HTMLDivElement, status: LiveStatusSnapshot): void {
+      const buffer = status.bufferSeconds > 0 ? `buffer ${status.bufferSeconds}s` : 'real time';
+      const delay = status.delaySeconds === null ? 'live' : `${status.delaySeconds.toFixed(1)}s behind`;
+      const catchUp = status.catchingUp ? ` · ${status.catchUpRate}x` : '';
+      const text = `${delay} (${buffer})${catchUp}`;
+      if (badge.textContent !== text) badge.textContent = text;
+      badge.classList.toggle('yte-catching-up', status.catchingUp);
     }
 
     // -----------------------------------------------------------------------
