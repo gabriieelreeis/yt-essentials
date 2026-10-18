@@ -1,7 +1,7 @@
 import { Toggle } from '@/components/Toggle';
-import { CAPTION_LANGUAGES, LIVE_DELAY_OPTIONS, QUALITY_LEVELS } from '@/shared/constants';
+import { CAPTION_LANGUAGES, QUALITY_LEVELS } from '@/shared/constants';
 import { languageDisplayName, t } from '@/shared/i18n';
-import type { DeepPartial, LiveDelayBuffer, QualityValue, Settings } from '@/shared/types';
+import type { DeepPartial, QualityValue, Settings } from '@/shared/types';
 
 interface FeaturesSettingsProps {
   settings: Settings;
@@ -15,10 +15,6 @@ interface FeaturesSettingsProps {
  * surfaces can never drift apart.
  */
 export function FeaturesSettings({ settings, onChange, showDebug = false }: FeaturesSettingsProps) {
-  const liveDelayOption = LIVE_DELAY_OPTIONS.find(
-    (option) => option.value === settings.liveDelay.buffer
-  );
-
   return (
     <>
       <section className="card">
@@ -85,26 +81,7 @@ export function FeaturesSettings({ settings, onChange, showDebug = false }: Feat
           onChange={(enabled) => onChange({ liveDelay: { enabled } })}
           label={t('liveDelayToggle')}
         />
-        <div className="row">
-          <label htmlFor="live-delay-buffer">{t('liveDelayBufferLabel')}</label>
-          <select
-            id="live-delay-buffer"
-            value={settings.liveDelay.buffer}
-            disabled={!settings.liveDelay.enabled}
-            onChange={(event) =>
-              onChange({ liveDelay: { buffer: event.target.value as LiveDelayBuffer } })
-            }
-          >
-            {LIVE_DELAY_OPTIONS.map(({ value, labelKey }) => (
-              <option key={value} value={value}>
-                {t(labelKey)}
-              </option>
-            ))}
-          </select>
-        </div>
-        <p className="hint">
-          {t('liveDelayHintIntro')} {liveDelayOption ? t(liveDelayOption.hintKey) : ''}
-        </p>
+        <p className="hint">{t('liveDelayHint')}</p>
       </section>
 
       <section className="card">

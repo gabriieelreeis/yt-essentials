@@ -63,8 +63,10 @@ interface WatchSession {
 
 /** Latest live-delay data published by the MAIN world (see checkLiveDelay there). */
 interface LiveStatusSnapshot {
-  bufferSeconds: number;
-  delaySeconds: number | null;
+  /** True latency against the live edge, in seconds (null when unmeasurable). */
+  latencySeconds: number | null;
+  /** Media downloaded ahead of the playhead, in seconds (null when unmeasurable). */
+  bufferSeconds: number | null;
   catchingUp: boolean;
   catchUpRate: number;
   /** When the snapshot arrived (used to drop stale data). */
@@ -189,8 +191,8 @@ export default defineContentScript({
       }
       if (message.type === 'live-status') {
         liveStatus = {
+          latencySeconds: message.latencySeconds,
           bufferSeconds: message.bufferSeconds,
-          delaySeconds: message.delaySeconds,
           catchingUp: message.catchingUp,
           catchUpRate: message.catchUpRate,
           at: Date.now()
@@ -439,11 +441,12 @@ export default defineContentScript({
     // -----------------------------------------------------------------------
 
     /**
-     * Small badge drawn inside the player showing how far behind the live edge
-     * playback is and which buffer is configured. Data comes from the MAIN
-     * world (`live-status` messages); when those stop arriving (option off,
-     * left the live, VOD) the badge disappears. Living inside #movie_player
-     * makes it visible in fullscreen too.
+     * Small badge drawn inside the player showing the live latency and the
+     * buffer downloaded ahead of the playhead (plus the speed when the engine
+     * is catching up). Data comes from the MAIN world (`live-status`
+     * messages); when those stop arriving (option off, left the live, VOD) the
+     * badge disappears. Living inside #movie_player makes it visible in
+     * fullscreen too.
      */
     function updateLiveStatus(): void {
       const status = liveStatus;
@@ -477,21 +480,22 @@ export default defineContentScript({
     }
 
     function renderLiveStatus(badge: HTMLDivElement, status: LiveStatusSnapshot): void {
-      const hasBuffer = status.bufferSeconds > 0;
-      let text: string;
-      if (status.delaySeconds === null) {
-        text = hasBuffer
-          ? t('liveBadgeUnmeasured', [String(status.bufferSeconds)])
-          : t('liveBadgeUnmeasuredRealTime');
-      } else if (hasBuffer) {
-        text = t('liveBadgeBehind', [
-          status.delaySeconds.toFixed(1),
-          String(status.bufferSeconds)
-        ]);
-      } else {
-        text = t('liveBadgeBehindRealTime', [status.delaySeconds.toFixed(1)]);
+      const latency = status.latencySeconds;
+      const buffer = status.bufferSeconds;
+      if (latency === null && buffer === null) {
+        // Defensive: the MAIN world does not publish unmeasurable statuses.
+        badge.remove();
+        return;
       }
-      if (status.catchingUp) text += ` · ${status.catchUpRate}x`;
+      let text: string;
+      if (latency === null) {
+        text = t('liveBadgeUnmeasured', [(buffer ?? 0).toFixed(1)]);
+      } else if (buffer === null) {
+        text = t('liveBadgeBehindNoBuffer', [latency.toFixed(1)]);
+      } else {
+        text = t('liveBadgeBehind', [latency.toFixed(1), buffer.toFixed(1)]);
+      }
+      if (status.catchingUp) text += ` · ${status.catchUpRate.toFixed(2)}x`;
       if (badge.textContent !== text) badge.textContent = text;
       badge.classList.toggle('yte-catching-up', status.catchingUp);
     }

@@ -19,25 +19,8 @@
     "message": "Nutzt die automatisch erzeugte Spur dieser Sprache, wenn vorhanden; sonst manuelle Untertitel oder eine übersetzte Spur."
   },
   "liveDelayToggle": { "message": "Live-Verzögerung reduzieren" },
-  "liveDelayBufferLabel": { "message": "Puffer" },
-  "liveDelayHintIntro": {
-    "message": "Wirkt nur auf Livestreams während der Wiedergabe: Gerät die Wiedergabe mehr als den gewählten Puffer hinter den Live-Rand, beschleunigt sie von selbst, bis sie wieder am Ziel ist."
-  },
-  "liveDelayRealTime": { "message": "Echtzeit" },
-  "liveDelayRealTimeHint": {
-    "message": "Bleibt direkt am Live-Rand. Nur bei schneller und sehr stabiler Verbindung wählen, bei der ein Aussetzer zu einer sichtbaren Pause würde."
-  },
-  "liveDelay2s": { "message": "2 Sekunden" },
-  "liveDelay2sHint": {
-    "message": "Kleiner Puffer: fängt kurze Aussetzer bei schnellen Verbindungen ab; die Verzögerung bleibt kaum wahrnehmbar."
-  },
-  "liveDelay5s": { "message": "5 Sekunden" },
-  "liveDelay5sHint": {
-    "message": "Ausgeglichener Puffer für durchschnittliche Verbindungen: flüssigere Wiedergabe mit einer Verzögerung deutlich unter dem üblichen YouTube-Wert."
-  },
-  "liveDelay10s": { "message": "10 Sekunden" },
-  "liveDelay10sHint": {
-    "message": "Zusätzlicher Puffer für langsame oder instabile Verbindungen: geringste Ruckelgefahr, aber die größte Verzögerung aller Optionen."
+  "liveDelayHint": {
+    "message": "Wirkt nur auf Livestreams während der Wiedergabe: Die Wiedergabe wird automatisch nahe am Live-Rand gehalten, beschleunigt nur so weit wie nötig und passt den Sicherheitspuffer an deine Verbindung an. Gerät sie mehr als 30 Sekunden zurück, springt sie direkt an den Live-Rand."
   },
   "skipToggle": { "message": "Schaltfläche „Nächstes Video“" },
   "skipAutoToggle": { "message": "Automatisch überspringen" },
@@ -106,8 +89,8 @@
       "buffer": { "content": "$2" }
     }
   },
-  "liveBadgeBehindRealTime": {
-    "message": "$delay$s hinter live (Echtzeit)",
+  "liveBadgeBehindNoBuffer": {
+    "message": "$delay$s hinter live",
     "placeholders": {
       "delay": { "content": "$1" }
     }
@@ -118,6 +101,5 @@
       "buffer": { "content": "$1" }
     }
   },
-  "liveBadgeUnmeasuredRealTime": { "message": "live (Echtzeit)" },
   "timeJustNow": { "message": "gerade eben" }
 }

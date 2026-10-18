@@ -28,21 +28,20 @@ export interface AdvanceMessage {
 }
 
 /**
- * Live-delay data published by the MAIN world on every check, while the
- * option is on and a live stream is playing. The isolated world uses it to
- * draw the badge inside the player; when messages stop arriving the badge
- * goes away.
+ * Live-delay data published by the MAIN world while the option is on and a
+ * live stream is detected. The isolated world uses it to draw the badge inside
+ * the player; when messages stop arriving the badge goes away.
  */
 export interface LiveStatusMessage {
   channel: typeof MESSAGE_CHANNEL;
   type: 'live-status';
-  /** Buffer chosen in the settings, in seconds (0 = real time). */
-  bufferSeconds: number;
-  /** Seconds playback sits behind the live edge; null when unmeasurable. */
-  delaySeconds: number | null;
-  /** True while playback is accelerated to catch up. */
+  /** True latency against the live edge, in seconds; null when unmeasurable. */
+  latencySeconds: number | null;
+  /** Media downloaded ahead of the playhead, in seconds; null when unmeasurable. */
+  bufferSeconds: number | null;
+  /** True while the engine is speeding playback up to catch the live edge. */
   catchingUp: boolean;
-  /** Playback rate used while catching up (informative). */
+  /** Playback rate the engine is holding (1 = normal). */
   catchUpRate: number;
 }
 

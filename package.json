@@ -2,7 +2,7 @@
   "name": "yt-essentials",
   "description": "Save watched videos, force resolution, auto-enable captions, reduce live delay and skip videos you already watched on YouTube.",
   "private": true,
-  "version": "0.8.0",
+  "version": "0.9.0",
   "type": "module",
   "scripts": {
     "dev": "wxt --browser chrome",

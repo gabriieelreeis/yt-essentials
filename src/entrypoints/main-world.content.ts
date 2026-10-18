@@ -22,11 +22,32 @@
 
 import { defineContentScript } from 'wxt/utils/define-content-script';
 import {
+  LIVE_AUTO_COOLDOWN_TICKS,
+  LIVE_AUTO_CREEP_S_PER_TICK,
+  LIVE_AUTO_TARGET_MAX_S,
+  LIVE_AUTO_TARGET_MIN_S,
+  LIVE_AUTO_TARGET_START_S,
+  LIVE_BRAKE_DRIFT_CEIL_S,
+  LIVE_BRAKE_DRIFT_SPAN_S,
+  LIVE_BRAKE_FLOOR_RATE,
+  LIVE_BRAKE_GAIN,
+  LIVE_BRAKE_START_S,
+  LIVE_BUFFER_BACKOFF_S,
+  LIVE_BUFFER_RAMP_S,
+  LIVE_BUFFER_RESUME_S,
+  LIVE_BUFFER_STALL_FLOOR_S,
   LIVE_CATCH_UP_RATE,
-  LIVE_DELAY_CHECK_INTERVAL_MS,
-  LIVE_DELAY_OPTIONS,
-  LIVE_DELAY_STOP_MARGIN_S,
-  LIVE_DELAY_TOLERANCE_S
+  LIVE_DELAY_IDLE_INTERVAL_MS,
+  LIVE_DELAY_PUBLISH_MS,
+  LIVE_DELAY_TICK_MIN_MS,
+  LIVE_DRAIN_BRAKE_STEP_S,
+  LIVE_ENGAGE_BAND_S,
+  LIVE_LATENCY_FULL_S,
+  LIVE_MIN_LATENCY_S,
+  LIVE_NEAR_STALL_S,
+  LIVE_RATE_STEP,
+  LIVE_SKIP_REARM_S,
+  LIVE_SKIP_TO_LIVE_S
 } from '@/shared/constants';
 import {
   MESSAGE_CHANNEL,
@@ -36,12 +57,15 @@ import {
 import {
   getPlayerElement,
   isSameTrack,
-  liveEdgeDelay,
   pickCaptionTrack,
   pickQuality,
+  readLiveStats,
+  seekToLiveHead,
   type CaptionTrackInfo,
+  type LivePlaybackStats,
   type PlayerProgressState,
   type PlayerSettings,
+  type PlayerVideoData,
   type YouTubePlayerElement
 } from '@/shared/youtube-player';
 import '@/shared/youtube-events';
@@ -50,6 +74,34 @@ const RETRY_INTERVAL_MS = 500;
 const RETRY_MAX_MS = 20000;
 /** `getPlayerState()` value while the video is actually playing. */
 const PLAYER_STATE_PLAYING = 1;
+
+/**
+ * Live catch-up control state. One instance lives for the whole content
+ * script; `resetLiveControl` clears the measurements whenever the video
+ * changes so one stream's averages never steer the next one.
+ */
+interface LiveEngineState {
+  /** Smoothed buffer health (null until the first tick). */
+  bufferEma: number | null;
+  /** Previous raw buffer health, for the trend. */
+  lastBuffer: number | null;
+  /** Smoothed buffer trend per tick (negative while draining). */
+  drainEma: number;
+  /** Catch-up hysteresis: true while surplus buffer may be spent. */
+  engaged: boolean;
+  /** True after a dip below the backoff line until the buffer recovers. */
+  backoff: boolean;
+  /** Adaptive cushion target, in seconds (see adjustAdaptiveTarget). */
+  target: number;
+  /** Ticks left before the cushion may creep back down. */
+  targetCooldown: number;
+  /** True after the jump-to-live backstop fired, until the latency recovers. */
+  skipped: boolean;
+  /** Rate we last wrote or adopted (1 = normal). */
+  appliedRate: number;
+  /** True when the user set a speed manually; the engine must not fight it. */
+  rateYielded: boolean;
+}
 
 export default defineContentScript({
   matches: ['https://www.youtube.com/*'],
@@ -64,10 +116,14 @@ export default defineContentScript({
     let retryDeadline = 0;
     /** Last live-delay diagnostic shown, so notices stay at one per video+reason. */
     let lastLiveNoticeKey: string | null = null;
-    /** Live catch-up state: whether the rate was changed and what to restore. */
-    let liveCatchUpApplied = false;
-    let liveCatchUpElement: YouTubePlayerElement | null = null;
-    let liveRateBefore: number | null = null;
+    /** Video the live engine is attached to; a change resets the control state. */
+    let liveVideoKey: string | null = null;
+    /** Live catch-up control state (see checkLiveDelay). */
+    const liveEngine = createLiveEngine();
+    /** When the last live-status message was sent (publish throttle). */
+    let liveStatusSentAt = 0;
+    /** Last engine tick across drivers (shared throttle). */
+    let lastLiveTickAt = 0;
 
     window.addEventListener('message', onWindowMessage);
     document.addEventListener('yt-navigate-finish', onNavigation);
@@ -76,12 +132,18 @@ export default defineContentScript({
     // Video events do not bubble, so they are observed in the capture phase.
     document.addEventListener('loadstart', onVideoEvent, true);
     document.addEventListener('playing', onVideoEvent, true);
+    // 'timeupdate' keeps the live-delay loop alive while the media advances:
+    // timers are throttled hard in hidden tabs, media events are not.
+    document.addEventListener('timeupdate', onLiveTick, true);
+    document.addEventListener('visibilitychange', onVisibilityChange);
 
     requestSettings();
 
     // Live-delay policing has its own cadence: it must keep running across SPA
     // navigations and is a no-op unless enabled and a live stream is playing.
-    window.setInterval(checkLiveDelay, LIVE_DELAY_CHECK_INTERVAL_MS);
+    // The interval covers paused/loading states; while playing, the shared
+    // throttle is fed by 'timeupdate' events (~4 ticks/s).
+    window.setInterval(onLiveTick, LIVE_DELAY_IDLE_INTERVAL_MS);
 
     // -----------------------------------------------------------------------
     // Wiring
@@ -140,6 +202,26 @@ export default defineContentScript({
       if (settings?.quality?.enabled) pendingQuality = true;
       if (settings?.captions?.enabled) pendingCaptions = true;
       startRetryLoop();
+    }
+
+    /** Coming back from a hidden tab: check right away, with fresh data. */
+    function onVisibilityChange(): void {
+      if (document.visibilityState !== 'visible') return;
+      lastLiveTickAt = 0;
+      onLiveTick();
+    }
+
+    /**
+     * Shared throttle for the live-delay drivers: 'timeupdate' events while
+     * the media advances (~4/s; media events are not throttled in hidden tabs
+     * like timers are) and the fallback interval for paused states. The tick
+     * spacing matches the controller EMAs' tuning.
+     */
+    function onLiveTick(): void {
+      const now = Date.now();
+      if (now - lastLiveTickAt < LIVE_DELAY_TICK_MIN_MS) return;
+      lastLiveTickAt = now;
+      checkLiveDelay();
     }
 
     function debug(...args: unknown[]): void {
@@ -286,115 +368,347 @@ export default defineContentScript({
     // -----------------------------------------------------------------------
 
     /**
-     * Keeps live playback close to the live edge. YouTube starts viewers near
-     * their achievable edge, but the delay grows (stalls, pausing, DVR
-     * wandering); when it exceeds the buffer chosen in the settings, playback
-     * is accelerated (LIVE_CATCH_UP_RATE) until the delay is back inside the
-     * buffer, then the previous speed is restored. VODs, paused playback and
-     * ads are never touched. Every check also publishes `live-status` so the
-     * isolated world can draw the badge inside the player.
+     * Keeps live playback close to the live edge with a buffer-regulation
+     * control loop (the approach the ZeroDelay extension validated on real
+     * streams):
+     *  - the control signal is `buffer_health_seconds` — the media already
+     *    downloaded ahead of the playhead, the part playback speed can spend.
+     *    `seekableEnd − current` stays near zero even 20s+ behind live, so it
+     *    is never used to steer;
+     *  - playback speeds up proportionally to latency demand × surplus buffer
+     *    above an adaptive cushion (up to LIVE_CATCH_UP_RATE), rests at 1x —
+     *    which holds the latency — and dips to 0.95x to rebuild a thin cushion;
+     *  - a jump-to-live backstop (LIVE_SKIP_TO_LIVE_S) covers huge backlogs
+     *    (a long pause) that acceleration could not close.
+     * VODs, paused playback and ads are never touched, and a manual speed
+     * change from the user is respected until they return to 1x. Every tick
+     * also publishes `live-status` (throttled) so the isolated world can draw
+     * the badge inside the player.
      */
     function checkLiveDelay(): void {
       const player = getPlayerElement();
       if (!player) return;
-      if (liveCatchUpApplied && liveCatchUpElement !== player) {
-        // The player element was recreated (navigation) while catching up:
-        // the new one starts at its own rate, nothing to restore.
-        liveCatchUpApplied = false;
-        liveCatchUpElement = null;
-        liveRateBefore = null;
+
+      const videoData = readVideoData(player);
+      const videoKey = videoData?.video_id ?? null;
+      if (videoKey !== liveVideoKey) {
+        liveVideoKey = videoKey;
+        resetLiveControl(liveEngine);
+        debug('live delay: control state reset', { videoId: videoKey });
       }
 
-      const config = settings?.liveDelay;
-      const enabled = !!config?.enabled;
-      const option = config
-        ? LIVE_DELAY_OPTIONS.find((item) => item.value === config.buffer)
-        : undefined;
-
-      let progress: PlayerProgressState | undefined;
-      try {
-        progress = player.getProgressState?.();
-      } catch {
-        progress = undefined;
-      }
-
-      const isLive = progress?.isLive === true || player.getVideoData?.()?.isLive === true;
-      const delay = liveEdgeDelay(progress);
-      const state = typeof player.getPlayerState === 'function' ? player.getPlayerState() : null;
-      const playing = state === null || state === PLAYER_STATE_PLAYING;
+      const enabled = settings?.liveDelay?.enabled === true;
+      const isLive = videoData?.isLive === true || readProgress(player)?.isLive === true;
       const adShowing = player.classList.contains('ad-showing');
+      const stats = enabled && isLive && !adShowing ? readLiveStats(player) : null;
 
       // Badge data for the isolated world; it hides the badge when these stop
       // arriving (option off, left the live, VOD).
-      if (enabled && option && isLive && !adShowing) {
-        const status: LiveStatusMessage = {
-          channel: MESSAGE_CHANNEL,
-          type: 'live-status',
-          bufferSeconds: option.seconds,
-          delaySeconds: delay,
-          catchingUp: liveCatchUpApplied,
-          catchUpRate: LIVE_CATCH_UP_RATE
-        };
-        window.postMessage(status, '*');
-      }
+      if (stats) publishLiveStatus(stats);
 
-      const actionable = enabled && !!option && isLive && delay !== null && playing && !adShowing;
-      if (!actionable || !option || delay === null) {
-        if (liveCatchUpApplied) stopLiveCatchUp(player, null);
-        else if (enabled && isLive && option && delay === null) {
-          logLiveDelayNotice('cannot measure the live delay', { buffer: option.value });
+      const state = readPlayerState(player);
+      const playing = state === null || state === PLAYER_STATE_PLAYING;
+      const actionable = enabled && isLive && playing && !adShowing && !liveEngine.rateYielded;
+      if (!actionable) {
+        adoptEchoedRate(player);
+        releaseLiveRate(player);
+        return;
+      }
+      if (!stats || stats.latencySeconds === null || stats.bufferSeconds === null) {
+        releaseLiveRate(player);
+        if (stats && stats.latencySeconds === null) {
+          logLiveDelayNotice('cannot measure the live latency', {
+            bufferSeconds: stats.bufferSeconds
+          });
         }
         return;
       }
 
-      const threshold =
-        option.seconds + (liveCatchUpApplied ? LIVE_DELAY_STOP_MARGIN_S : LIVE_DELAY_TOLERANCE_S);
-      if (delay > threshold) {
-        if (!liveCatchUpApplied) startLiveCatchUp(player, delay, option.seconds);
-      } else if (liveCatchUpApplied) {
-        stopLiveCatchUp(player, delay);
-      }
+      const latency = stats.latencySeconds;
+      const buffer = stats.bufferSeconds;
+      maybeSkipToLive(player, latency);
+
+      const rateBefore = liveEngine.appliedRate;
+      applyLiveRate(player, liveCatchUpRate(latency, buffer));
+      logRateTransition(rateBefore, latency, buffer);
     }
 
-    /** Accelerates playback until `checkLiveDelay` decides the target is reached. */
-    function startLiveCatchUp(
-      player: YouTubePlayerElement,
-      delaySeconds: number,
-      bufferSeconds: number
-    ): void {
-      const current = readPlaybackRate(player);
-      liveRateBefore = current ?? 1;
-      liveCatchUpElement = player;
-      liveCatchUpApplied = true;
+    /** Throttled `live-status` message; the isolated world draws the badge. */
+    function publishLiveStatus(stats: LivePlaybackStats): void {
+      if (stats.latencySeconds === null && stats.bufferSeconds === null) return;
+      const now = Date.now();
+      if (now - liveStatusSentAt < LIVE_DELAY_PUBLISH_MS) return;
+      liveStatusSentAt = now;
+      const status: LiveStatusMessage = {
+        channel: MESSAGE_CHANNEL,
+        type: 'live-status',
+        latencySeconds: stats.latencySeconds,
+        bufferSeconds: stats.bufferSeconds,
+        catchingUp: !liveEngine.rateYielded && liveEngine.appliedRate > 1.001,
+        catchUpRate: liveEngine.appliedRate
+      };
+      window.postMessage(status, '*');
+    }
 
-      if (current !== LIVE_CATCH_UP_RATE && !writePlaybackRate(player, LIVE_CATCH_UP_RATE)) {
-        liveCatchUpApplied = false;
-        liveCatchUpElement = null;
-        debug('live delay: playback rate API unavailable');
+    /**
+     * Buffer-regulation loop (mirrors the reference controller): returns the
+     * playback rate to hold this tick — 1 at rest, up to LIVE_CATCH_UP_RATE
+     * while spending surplus buffer, down to LIVE_BRAKE_FLOOR_RATE while
+     * rebuilding a thin one.
+     */
+    function liveCatchUpRate(latency: number, health: number): number {
+      const engine = liveEngine;
+      engine.bufferEma =
+        engine.bufferEma === null ? health : engine.bufferEma * 0.9 + health * 0.1;
+      if (engine.lastBuffer !== null) {
+        engine.drainEma = engine.drainEma * 0.8 + (health - engine.lastBuffer) * 0.2;
+      }
+      engine.lastBuffer = health;
+
+      // The cushion adapts to the connection (the loop the reference calls
+      // "automatic"): a near-stall raises it by one second; calm streaming
+      // creeps it back down. Runs first so the target keeps adapting even
+      // while the early rests below return.
+      const target = adjustAdaptiveTarget(health);
+
+      if (latency < LIVE_MIN_LATENCY_S) return restOrBrake(latency);
+      if (health < LIVE_BUFFER_STALL_FLOOR_S) return restOrBrake(latency);
+
+      // Instantaneous backoff: a raw dip cuts acceleration now and it stays
+      // cut until the buffer recovers (no EMA, no taper) — this protects the
+      // descent phase, where a trough is how late segments become stalls.
+      if (health <= LIVE_BUFFER_BACKOFF_S) engine.backoff = true;
+      else if (health >= LIVE_BUFFER_RESUME_S) engine.backoff = false;
+      if (engine.backoff) return restOrBrake(latency);
+
+      // A real drop must bite at once: never let a stale average hide it.
+      const bufferNow = Math.min(health, engine.bufferEma);
+
+      // Don't push against a connection that is already losing ground.
+      if (engine.drainEma < LIVE_DRAIN_BRAKE_STEP_S) return restOrBrake(latency);
+
+      // Hysteresis: engage only comfortably above the cushion (arming on the
+      // smoothed value so a spike cannot re-arm a parked engine into sawtooth
+      // cycling), and disengage the moment the buffer touches the cushion.
+      if (engine.engaged) {
+        if (bufferNow <= target) engine.engaged = false;
+      } else if (engine.bufferEma > target + LIVE_ENGAGE_BAND_S) {
+        engine.engaged = true;
+      }
+      if (!engine.engaged) return restOrBrake(latency);
+
+      const demand = clamp01((latency - LIVE_MIN_LATENCY_S) / LIVE_LATENCY_FULL_S);
+      const headroom = clamp01((bufferNow - target) / LIVE_BUFFER_RAMP_S);
+      return 1 + (LIVE_CATCH_UP_RATE - 1) * demand * headroom;
+    }
+
+    /** Adaptive cushion: near-stall raises it (capped); comfort creeps it down. */
+    function adjustAdaptiveTarget(health: number): number {
+      const engine = liveEngine;
+      if (health < LIVE_NEAR_STALL_S) {
+        engine.target = Math.min(LIVE_AUTO_TARGET_MAX_S, engine.target + 1);
+        engine.targetCooldown = LIVE_AUTO_COOLDOWN_TICKS;
+      } else if (engine.targetCooldown > 0) {
+        engine.targetCooldown -= 1;
+      } else if (engine.bufferEma !== null && engine.bufferEma > engine.target + 2) {
+        engine.target = Math.max(
+          LIVE_AUTO_TARGET_MIN_S,
+          engine.target - LIVE_AUTO_CREEP_S_PER_TICK
+        );
+      }
+      return engine.target;
+    }
+
+    /**
+     * Rest at 1x — or dip to 0.95x to rebuild a thin, still-draining cushion.
+     * Deliberately timid: it fires only on a sustained drain, never goes below
+     * LIVE_BRAKE_FLOOR_RATE, and fades out as latency climbs toward the drift
+     * ceiling (the jump-to-live backstop is the failsafe).
+     */
+    function restOrBrake(latency: number): number {
+      const bufferEma = liveEngine.bufferEma;
+      if (bufferEma === null || bufferEma >= LIVE_BRAKE_START_S || liveEngine.drainEma >= 0) {
+        return 1;
+      }
+      const budget = clamp01((LIVE_BRAKE_DRIFT_CEIL_S - latency) / LIVE_BRAKE_DRIFT_SPAN_S);
+      const slowdown = Math.min(
+        LIVE_BRAKE_GAIN * (LIVE_BRAKE_START_S - bufferEma),
+        1 - LIVE_BRAKE_FLOOR_RATE
+      );
+      return 1 - slowdown * budget;
+    }
+
+    /**
+     * Backstop for backlogs acceleration could not close (a long pause, a
+     * reconnection): jumps straight to the live edge, like the reference
+     * extension does by default. Re-arms once the latency recovers.
+     */
+    function maybeSkipToLive(player: YouTubePlayerElement, latency: number): void {
+      const engine = liveEngine;
+      if (latency < LIVE_SKIP_REARM_S) engine.skipped = false;
+      if (engine.skipped || latency < LIVE_SKIP_TO_LIVE_S) return;
+      if (!seekToLiveHead(player)) return;
+      try {
+        player.playVideo?.();
+      } catch {
+        /* the jump does not depend on this */
+      }
+      engine.skipped = true;
+      debug('live delay: jumped to the live edge', { latencySeconds: round1(latency) });
+    }
+
+    /**
+     * Writes the desired rate through the player API on the 0.05 grid, keeping
+     * `video.playbackRate` mirrored. A rate that does not match what the
+     * engine last wrote means the user changed the speed manually: the engine
+     * backs off (and stops restoring) until they set it back to 1x.
+     */
+    function applyLiveRate(player: YouTubePlayerElement, desired: number): void {
+      adoptEchoedRate(player);
+      const engine = liveEngine;
+      if (engine.rateYielded) return;
+
+      const rate = quantizeRate(desired);
+      if (Math.abs(rate - engine.appliedRate) > 0.01) {
+        if (!writePlaybackRate(player, rate)) {
+          engine.rateYielded = true;
+          logLiveDelayNotice('playback rate API unavailable', {});
+          return;
+        }
+        engine.appliedRate = rate;
+      }
+      syncVideoRate(player, engine.appliedRate);
+    }
+
+    /** Adopts the player's echoed rate; a foreign non-1x rate is the user's. */
+    function adoptEchoedRate(player: YouTubePlayerElement): void {
+      const echo = readPlaybackRate(player);
+      const engine = liveEngine;
+      if (echo === null || Math.abs(echo - engine.appliedRate) <= 0.01) return;
+      if (Math.abs(echo - 1) <= 0.01) {
+        engine.appliedRate = 1;
+        engine.rateYielded = false;
         return;
       }
-      debug('live delay: catching up', {
-        delaySeconds: Number(delaySeconds.toFixed(1)),
-        bufferSeconds,
-        rate: LIVE_CATCH_UP_RATE
-      });
+      engine.appliedRate = echo;
+      engine.rateYielded = true;
+      debug('live delay: manual speed change, backing off', { rate: echo });
     }
 
-    /** Restores the previous speed once the delay is back inside the buffer. */
-    function stopLiveCatchUp(player: YouTubePlayerElement, delaySeconds: number | null): void {
-      const current = readPlaybackRate(player);
-      const target = liveRateBefore ?? 1;
-      liveCatchUpApplied = false;
-      liveCatchUpElement = null;
-      liveRateBefore = null;
+    /**
+     * Returns playback to 1x whenever the engine is not actively catching up
+     * (option off, left the live, paused, ad). This invariant also restores a
+     * raise the engine left on the player when the user navigates to another
+     * video.
+     */
+    function releaseLiveRate(player: YouTubePlayerElement): void {
+      const engine = liveEngine;
+      if (engine.rateYielded || Math.abs(engine.appliedRate - 1) <= 0.01) return;
+      if (!writePlaybackRate(player, 1)) {
+        engine.rateYielded = true;
+        logLiveDelayNotice('playback rate API unavailable', {});
+        return;
+      }
+      debug('live delay: rate restored', { previousRate: engine.appliedRate });
+      engine.appliedRate = 1;
+    }
 
-      // A rate different from ours means the user took over; leave it alone.
-      if (current !== null && current !== LIVE_CATCH_UP_RATE) return;
-      if (current !== target) writePlaybackRate(player, target);
-      debug('live delay: catch-up finished', {
-        delaySeconds: delaySeconds === null ? null : Number(delaySeconds.toFixed(1)),
-        restoredRate: target
-      });
+    /** One debug line per behavior change (enter/leave catch-up, brake). */
+    function logRateTransition(rateBefore: number, latency: number, buffer: number): void {
+      const engine = liveEngine;
+      if (engine.rateYielded) return;
+      const rateAfter = engine.appliedRate;
+      if (Math.abs(rateAfter - rateBefore) <= 0.011) return;
+      if (rateAfter < 0.999) {
+        debug('live delay: rebuilding the buffer', { rate: rateAfter });
+      } else if (rateAfter > 1.001 && rateBefore <= 1.001) {
+        debug('live delay: catching up', {
+          rate: rateAfter,
+          latencySeconds: round1(latency),
+          bufferSeconds: round1(buffer)
+        });
+      } else if (rateAfter <= 1.001 && rateBefore > 1.001) {
+        debug('live delay: catch-up resting', { rate: rateAfter });
+      }
+    }
+
+    /** Rates are written on the player's 0.05 grid to avoid endless micro-writes. */
+    function quantizeRate(rate: number): number {
+      return Number((Math.round(rate / LIVE_RATE_STEP) * LIVE_RATE_STEP).toFixed(2));
+    }
+
+    /** Mirrors the engine rate on the <video> element (best effort). */
+    function syncVideoRate(player: YouTubePlayerElement, rate: number): void {
+      try {
+        const video = player.querySelector('video');
+        if (video && Math.abs(video.playbackRate - rate) > 0.01) video.playbackRate = rate;
+      } catch {
+        /* some media elements reject transient rates; the next tick retries */
+      }
+    }
+
+    function createLiveEngine(): LiveEngineState {
+      return {
+        bufferEma: null,
+        lastBuffer: null,
+        drainEma: 0,
+        engaged: false,
+        backoff: false,
+        target: LIVE_AUTO_TARGET_START_S,
+        targetCooldown: 0,
+        skipped: false,
+        appliedRate: 1,
+        rateYielded: false
+      };
+    }
+
+    /**
+     * Clears the control state when the video changes. The rate adoption
+     * fields survive on purpose: a rate the engine raised on the previous
+     * video must still be restored on the next one (see releaseLiveRate).
+     */
+    function resetLiveControl(engine: LiveEngineState): void {
+      engine.bufferEma = null;
+      engine.lastBuffer = null;
+      engine.drainEma = 0;
+      engine.engaged = false;
+      engine.backoff = false;
+      engine.target = LIVE_AUTO_TARGET_START_S;
+      engine.targetCooldown = 0;
+      engine.skipped = false;
+    }
+
+    function readVideoData(player: YouTubePlayerElement): PlayerVideoData | null {
+      try {
+        return player.getVideoData?.() ?? null;
+      } catch {
+        return null;
+      }
+    }
+
+    function readProgress(player: YouTubePlayerElement): PlayerProgressState | null {
+      try {
+        return player.getProgressState?.() ?? null;
+      } catch {
+        return null;
+      }
+    }
+
+    function readPlayerState(player: YouTubePlayerElement): number | null {
+      try {
+        const state = player.getPlayerState?.();
+        return typeof state === 'number' ? state : null;
+      } catch {
+        return null;
+      }
+    }
+
+    function clamp01(value: number): number {
+      return value < 0 ? 0 : value > 1 ? 1 : value;
+    }
+
+    function round1(value: number): number {
+      return Number(value.toFixed(1));
     }
 
     function readPlaybackRate(player: YouTubePlayerElement): number | null {

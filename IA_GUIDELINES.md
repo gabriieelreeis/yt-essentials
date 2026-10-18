@@ -34,13 +34,15 @@ interface é traduzida, seção 5.8):
    legenda humana no idioma; se também não existir, usa a tradução de qualquer
    faixa para o idioma escolhido.
 4. **Reduzir o delay de lives** — mantém a reprodução de transmissões ao vivo
-   perto da borda, com **buffer configurável** (tempo real, 2 s, 5 s ou
-   10 s = quanto a reprodução pode ficar atrás da borda) e informativo de
-   conexão por buffer no popup/options. Quando o delay passa do buffer, a
-   reprodução **acelera pelo próprio player** (1.5x) até voltar ao alvo e
-   retoma a velocidade normal; um **indicador dentro do player** mostra o
-   buffer e o tempo atrás da borda (visível até em tela cheia). Só age em
-   lives, enquanto o vídeo está rodando. Detalhes na seção 5.7.
+   perto da borda ao vivo automaticamente: lê a latência real e o **buffer**
+   (mídia já baixada à frente do playhead) pelo player, **acelera o próprio
+   player apenas o suficiente** para consumir o buffer que passa de um colchão
+   de segurança **automático** (adaptado à conexão), descansa em 1x e volta a
+   0.95x para reconstruir um colchão fino; se a reprodução ficar mais de 30 s
+   atrás (pausa longa), salta direto para a borda ao vivo. Um **indicador
+   dentro do player** mostra a latência e o buffer atual (visível até em tela
+   cheia). Só age em lives, enquanto o vídeo está rodando. Detalhes na
+   seção 5.7.
 5. **Pular vídeos já assistidos** — ao abrir um vídeo cujo registro anterior
    tenha `percent >= ALREADY_WATCHED_PERCENT` (90), aparece um botão flutuante
    "Next video" no canto inferior esquerdo **da página** (overlay fixo, por cima
@@ -161,7 +163,7 @@ Adicionar um campo em `DEFAULT_SETTINGS` (`src/shared/constants.ts`) + no tipo
   "watched":  { "enabled": true, "minSeconds": 5, "maxEntries": 2000 },
   "quality":  { "enabled": false, "value": "hd1080" },
   "captions": { "enabled": false, "language": "en" },
-  "liveDelay": { "enabled": false, "buffer": "2s" },
+  "liveDelay": { "enabled": false },
   "skip":     { "enabled": true, "autoSkip": false }
 }
 ```

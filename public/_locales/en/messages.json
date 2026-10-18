@@ -19,25 +19,8 @@
     "message": "Uses the auto-generated track of that language when available, falling back to human captions or a translated track."
   },
   "liveDelayToggle": { "message": "Reduce live delay" },
-  "liveDelayBufferLabel": { "message": "Buffer" },
-  "liveDelayHintIntro": {
-    "message": "Only affects live streams while they are playing: if playback drifts more than the chosen buffer behind the live edge, it speeds up by itself until it is back on target."
-  },
-  "liveDelayRealTime": { "message": "Real time" },
-  "liveDelayRealTimeHint": {
-    "message": "Stays glued to the live edge. Pick it only with a fast and very stable connection, where a hiccup would become a visible pause."
-  },
-  "liveDelay2s": { "message": "2 seconds" },
-  "liveDelay2sHint": {
-    "message": "Tiny cushion: absorbs short hiccups on fast connections while the delay stays almost imperceptible."
-  },
-  "liveDelay5s": { "message": "5 seconds" },
-  "liveDelay5sHint": {
-    "message": "Balanced cushion for average connections: smoother playback, with a delay still clearly below YouTube's usual drift."
-  },
-  "liveDelay10s": { "message": "10 seconds" },
-  "liveDelay10sHint": {
-    "message": "Extra cushion for slow or unstable connections: the lowest chance of stutter, with the largest delay of the options."
+  "liveDelayHint": {
+    "message": "Works on live streams while they are playing: playback is automatically kept near the live edge, speeding up only as much as needed, with a safety cushion that adapts to your connection. If it ever falls more than 30 seconds behind, it jumps straight to the live edge."
   },
   "skipToggle": { "message": "Next video button" },
   "skipAutoToggle": { "message": "Skip automatically" },
@@ -102,8 +85,8 @@
       "buffer": { "content": "$2" }
     }
   },
-  "liveBadgeBehindRealTime": {
-    "message": "$delay$s behind (real time)",
+  "liveBadgeBehindNoBuffer": {
+    "message": "$delay$s behind",
     "placeholders": {
       "delay": { "content": "$1" }
     }
@@ -114,6 +97,5 @@
       "buffer": { "content": "$1" }
     }
   },
-  "liveBadgeUnmeasuredRealTime": { "message": "live (real time)" },
   "timeJustNow": { "message": "just now" }
 }

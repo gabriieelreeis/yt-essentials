@@ -47,27 +47,13 @@ export interface CaptionsSettings {
   language: string;
 }
 
-/**
- * How far behind the live edge playback may sit. `real-time` is the smallest
- * possible delay; the numeric options are safety cushions for connections
- * that cannot hold the edge without stuttering.
- */
-export type LiveDelayBuffer = 'real-time' | '2s' | '5s' | '10s';
-
-export interface LiveDelayOption {
-  value: LiveDelayBuffer;
-  /** i18n key for the option label shown in the settings UI. */
-  labelKey: MessageKey;
-  /** Seconds of cushion kept behind the live edge (0 = real time). */
-  seconds: number;
-  /** i18n key for the connection-oriented explanation shown in the UI. */
-  hintKey: MessageKey;
-}
-
 export interface LiveDelaySettings {
-  /** Keeps live playback close to the live edge (live streams only). */
+  /**
+   * Keeps live playback close to the live edge (live streams only). The
+   * safety cushion is chosen automatically by the engine (adaptive); there is
+   * no user-facing buffer option.
+   */
   enabled: boolean;
-  buffer: LiveDelayBuffer;
 }
 
 export interface SkipSettings {

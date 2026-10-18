@@ -27,8 +27,9 @@ export interface PlayerVideoData {
 }
 
 /**
- * Snapshot returned by `player.getProgressState()`. On live streams
- * `seekableEnd` is the live edge, in the same time scale as `current`.
+ * Snapshot returned by `player.getProgressState()`. Used only to confirm a
+ * stream is live; the live-delay engine steers off `getStatsForNerds()`
+ * (`seekableEnd − current` stays near zero even 20 s behind live).
  */
 export interface PlayerProgressState {
   current?: number;
@@ -38,6 +39,19 @@ export interface PlayerProgressState {
   isLive?: boolean;
   isSeekable?: boolean;
   isAtLiveHead?: boolean;
+}
+
+/**
+ * The subset of `player.getStatsForNerds()` used to steer the live catch-up.
+ * Fields are strings ("23.4"), and `"-"` when the player cannot measure them.
+ */
+export interface PlayerLiveStats {
+  /** Latency against the true live edge, in seconds. */
+  live_latency_secs?: string | number;
+  /** Media downloaded ahead of the playhead, in seconds. */
+  buffer_health_seconds?: string | number;
+  /** Non-empty means special latency handling: not a reducible live. */
+  live_latency_style?: string;
 }
 
 /**
@@ -54,11 +68,17 @@ export interface YouTubePlayerElement extends HTMLElement {
   loadModule?: (moduleName: string) => void;
   /** Advances to the next video (same action as YouTube's next button). */
   nextVideo?: () => void;
-  /** Progress snapshot (current time, live edge, seekability). */
+  /** Progress snapshot (live detection only; see PlayerProgressState). */
   getProgressState?: () => PlayerProgressState | undefined;
+  /** Raw "stats for nerds" values used by the live-delay engine. */
+  getStatsForNerds?: () => PlayerLiveStats | undefined;
   /** Numeric player state (-1 unstarted, 1 playing, 2 paused, 3 buffering). */
   getPlayerState?: () => number;
   getVideoData?: () => PlayerVideoData | undefined;
+  /** Jumps the playhead to the live edge (backstop for huge backlogs). */
+  seekToLiveHead?: () => void;
+  /** Starts playback (defensive call after a live-edge jump). */
+  playVideo?: () => void;
   /** Playback speed (1 = normal); lives catch up by raising this temporarily. */
   getPlaybackRate?: () => number;
   setPlaybackRate?: (rate: number) => void;
@@ -83,7 +103,8 @@ export interface PlayerSettings {
   debug?: boolean;
   quality?: { enabled: boolean; value: string };
   captions?: { enabled: boolean; language: string };
-  liveDelay?: { enabled: boolean; buffer: string };
+  /** Live-delay toggle; the safety cushion is chosen automatically. */
+  liveDelay?: { enabled: boolean };
 }
 
 export function getPlayerElement(): YouTubePlayerElement | null {
@@ -91,17 +112,68 @@ export function getPlayerElement(): YouTubePlayerElement | null {
   return (element as YouTubePlayerElement | null) ?? null;
 }
 
+/** Live signals fed to the catch-up controller (both required to steer). */
+export interface LivePlaybackStats {
+  /** True latency against the live edge, in seconds. */
+  latencySeconds: number | null;
+  /** Media downloaded ahead of the playhead, in seconds. */
+  bufferSeconds: number | null;
+}
+
+/** Parses a stats-for-nerds numeric field ("23.4"); null when unmeasurable. */
+export function parseStatSeconds(value: string | number | undefined): number | null {
+  const parsed = typeof value === 'number' ? value : Number.parseFloat(String(value ?? ''));
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
 /**
- * Seconds playback sits behind the live edge (`seekableEnd - current`).
- * Returns null when the snapshot has no usable numbers; callers must make
- * sure the stream is actually live before trusting the value.
+ * Reads the live control signals from the player. `live_latency_secs` is the
+ * real latency — the angle the user perceives — while `buffer_health_seconds`
+ * (media downloaded ahead of the playhead) is the part playback speed can
+ * actually spend. A non-empty `live_latency_style` marks streams with special
+ * latency handling, where the engine must not act. The buffer falls back to
+ * the <video> element's last buffered range when the stats are missing.
  */
-export function liveEdgeDelay(progress: PlayerProgressState | null | undefined): number | null {
-  if (!progress) return null;
-  const current = Number(progress.current);
-  const end = Number(progress.seekableEnd);
-  if (!Number.isFinite(current) || !Number.isFinite(end)) return null;
-  return Math.max(0, end - current);
+export function readLiveStats(player: YouTubePlayerElement): LivePlaybackStats {
+  let latencySeconds: number | null = null;
+  let bufferSeconds: number | null = null;
+
+  try {
+    const stats = player.getStatsForNerds?.();
+    const style = stats?.live_latency_style;
+    if (stats && (style === undefined || style === '')) {
+      latencySeconds = parseStatSeconds(stats.live_latency_secs);
+      bufferSeconds = parseStatSeconds(stats.buffer_health_seconds);
+    }
+  } catch {
+    /* the stats API is best effort */
+  }
+
+  if (bufferSeconds === null) bufferSeconds = bufferedAheadSeconds(player);
+  return { latencySeconds, bufferSeconds };
+}
+
+/** End of the last buffered range minus the playhead (buffer fallback). */
+function bufferedAheadSeconds(player: YouTubePlayerElement): number | null {
+  try {
+    const video = player.querySelector('video');
+    if (!video || video.buffered.length === 0) return null;
+    const ahead = video.buffered.end(video.buffered.length - 1) - video.currentTime;
+    return Number.isFinite(ahead) ? Math.max(0, ahead) : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Jumps through the player API to the live edge; false when unavailable. */
+export function seekToLiveHead(player: YouTubePlayerElement): boolean {
+  if (typeof player.seekToLiveHead !== 'function') return false;
+  try {
+    player.seekToLiveHead();
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 export function qualityRank(quality: string): number {
