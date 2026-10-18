@@ -248,7 +248,7 @@ Este é o ponto mais importante do projeto:
 │ src/entrypoints/main-world.content.ts     ▼  │          ▼              │
 │  • guarda o snapshot de settings          ◄──┘                         │
 │  • aplica resolução e legendas no #movie_player                        │
-│  • reduz o delay de lives (acelera 1.5x até o alvo)                    │
+│  • reduz o delay de lives (regula o buffer, acelera até 1.5x)          │
 │  • publica {type:'live-status'} (badge no player)                      │
 │  • atende {type:'advance'} → player.nextVideo()                        │
 └────────────────────────────────────────────────────────────────────────┘
@@ -260,10 +260,10 @@ que o `storage.getSettings()` resolve — a mensagem perdida no handshake é
 coberta pelo push, então não há corrida real.
 
 Além disso, o `main-world` publica `{type:'live-status'}` a cada 1 s enquanto a
-opção de live delay estiver ligada numa live (buffer atual, delay em relação à
-borda e se está acelerando); o `content.ts` usa esses dados para desenhar o
-badge dentro do player e o esconde quando eles param de chegar (recurso
-desligado, saiu da live, VOD).
+opção de live delay estiver ligada numa live (latência real, buffer baixado à
+frente do playhead e se está acelerando); o `content.ts` usa esses dados para
+desenhar o badge dentro do player e o esconde quando eles param de chegar
+(recurso desligado, saiu da live, VOD).
 
 ### 5.2 Fluxo: configurações
 
@@ -394,49 +394,81 @@ reatividade é feita por `storage.onChanged`.
 
 ### 5.7 Fluxo: redução do delay de lives (main-world.content.ts)
 
-- **Configuração:** `settings.liveDelay.enabled` (default **false**) e
-  `settings.liveDelay.buffer` (default `"2s"`). Opções em `LIVE_DELAY_OPTIONS`
-  (`constants.ts`): `real-time` (0 s), `2s`, `5s`, `10s` — o número é o
-  "colchão" tolerado atrás da borda ao vivo; cada opção tem um informativo de
-  conexão exibido no popup/options. Desligado por padrão: recurso que mexe na
-  reprodução via APIs internas é opt-in (como resolução/legendas).
-- **Loop:** `checkLiveDelay()` roda a cada 1 s (`LIVE_DELAY_CHECK_INTERVAL_MS`)
-  no main world desde o boot — não depende de eventos e não faz nada quando o
-  recurso está desligado.
-- **Medição:** `liveEdgeDelay(progress)` (`youtube-player.ts`) = `seekableEnd −
-  current`, em segundos. É o único sinal usado (não dá para confiar em
-  `getDuration()` em lives).
-- **Ação (aceleração, não seek):** com o player **playing**, sem anúncio
-  (`ad-showing`) e numa live, quando `delay > buffer + LIVE_DELAY_TOLERANCE_S`
-  (1,5 s) chama `player.setPlaybackRate(LIVE_CATCH_UP_RATE)` (1.5x; fallback
-  `video.playbackRate` se a API não existir) e mantém a aceleração até
-  `delay <= buffer + LIVE_DELAY_STOP_MARGIN_S` (0,5 s — histerese que evita
-  liga/desliga a cada tick), quando restaura a velocidade anterior. A 1.5x o
-  delay fecha 0,5 s por segundo: um atraso de D segundos além do alvo leva
-  ~2×D segundos para convergir. Pausado/buffering desliga a aceleração (e
-  restaura a velocidade); ao dar play, ela volta em ≤1 s se ainda estiver atrás.
-- **Velocidade do usuário:** a velocidade anterior é capturada ao acelerar e
-  restaurada ao terminar; se o usuário mudar a velocidade manualmente no meio
-  (valor diferente de 1.5x), a extensão não sobrescreve.
-- **Indicador no player (badge):** a cada verificação o main world publica
-  `{type:'live-status'}` (buffer, delay, `catchingUp`, taxa) e o `content.ts`
+A engine segue o desenho do **ZeroDelay** (repositório de referência validado
+em lives reais), com o colchão de segurança **automático** — não existe opção
+de buffer na UI.
+
+- **Configuração:** apenas `settings.liveDelay.enabled` (default **false**):
+  recurso que mexe na reprodução via APIs internas é opt-in (como
+  resolução/legendas).
+- **Sinais (por que não `seekableEnd − current`):** em lives SABR modernas o
+  player se considera "na borda" (`seekableEnd − current` ≈ 0) mesmo ~20 s
+  atrás do tempo real, então o sinal de controle é
+  `getStatsForNerds().buffer_health_seconds` — a mídia já baixada à frente do
+  playhead, que é exatamente a parte que a velocidade consegue consumir. A
+  latência usada nas decisões e no badge vem de `live_latency_secs` (mesma
+  fonte); `live_latency_style` não vazio marca lives com tratamento especial e
+  a engine não age. Fallback do buffer: `video.buffered.end(last) −
+  currentTime`. (`readLiveStats()` em `youtube-player.ts`.)
+- **Loop:** `onLiveTick()` com throttle compartilhado (`LIVE_DELAY_TICK_MIN_MS`
+  = 200 ms → ~4 ticks/s). Dois drivers: eventos `timeupdate` do `<video>`
+  (imunes ao throttle de timers em abas ocultas — é o que mantém a convergência
+  em background) e um `setInterval` de 1 s como fallback para
+  pausado/carregando (`LIVE_DELAY_IDLE_INTERVAL_MS`); `visibilitychange` força
+  um tick imediato ao voltar para a aba.
+- **Controle (regulação do buffer, em bursts):** com o player **playing**, sem
+  anúncio (`ad-showing`) e numa live, `liveCatchUpRate(latency, health)`
+  atualiza as EMAs (buffer e tendência) e:
+  1. resolve o colchão adaptativo (ver abaixo);
+  2. descansa em 1x se `latency < LIVE_MIN_LATENCY_S` (2 s), se o buffer
+     instantâneo caiu abaixo de `LIVE_BUFFER_STALL_FLOOR_S` (1,5 s), se está em
+     backoff (dip instantâneo ≤ 2,5 s; reativa ao recuperar ≥ 4 s) ou se a
+     tendência do buffer está drenando (`LIVE_DRAIN_BRAKE_STEP_S`);
+  3. histerese de engate: só acelera com a EMA do buffer ≥ colchão + 1,5 s
+     (`LIVE_ENGAGE_BAND_S`) e desengata assim que o buffer toca o colchão;
+  4. taxa = `1 + (LIVE_CATCH_UP_RATE − 1) × demanda × folga`: a demanda cresce
+     com a latência (0 em 2 s, 1 em 8 s) e a folga com o buffer acima do
+     colchão (0 no alvo, 1 a +2 s). Teto de 1,5x. Na prática são bursts de
+     ~1,05–1,5x que consomem só o excedente — nunca o colchão.
+- **Freio (anti-travada):** quando descansaria e o buffer suavizado está abaixo
+  de `LIVE_BRAKE_START_S` (2 s) **e** drenando, a engine reproduz um tico mais
+  devagar (até `LIVE_BRAKE_FLOOR_RATE` = 0,95x, ganho `LIVE_BRAKE_GAIN`) para
+  reconstruir o colchão; o efeito esmaece conforme a latência sobe até 22 s.
+- **Colchão automático:** começa em `LIVE_AUTO_TARGET_START_S` (6 s); uma
+  quase-travada (buffer < 1 s) sobe +1 s (teto de 9 s, com cooldown de ~60 s)
+  e, quando a conexão está folgada, cai 0,01 s/tick até 4 s.
+- **Backstop de borda:** se a latência chega a `LIVE_SKIP_TO_LIVE_S` (30 s) —
+  pausa longa, reconexão — chama `player.seekToLiveHead()` + `playVideo()`
+  (como o ZeroDelay faz por padrão); re-arma quando a latência volta a < 15 s.
+- **Taxa e velocidade do usuário:** as taxas são escritas na grade de 0,05 do
+  player (`LIVE_RATE_STEP`) e espelhadas em `video.playbackRate`. A cada tick a
+  engine compara o `getPlaybackRate()` ecoado com o que ela mesma escreveu: um
+  valor diferente (fora 1x) é do usuário → a engine para de mexer na velocidade
+  e não restaura até o usuário voltar a 1x.
+- **Invariante de restauração:** sempre que a engine não está acelerando
+  (recurso desligado, saiu da live, pausado, anúncio) a velocidade volta a 1x —
+  isso também restaura a velocidade ao navegar para outro vídeo com um aumento
+  ainda aplicado. O estado de controle (EMAs/histerese/colchão) zera quando o
+  `video_id` muda; os campos de adoção da taxa sobrevivem de propósito.
+- **Indicador no player (badge):** o main world publica `{type:'live-status'}`
+  (throttle de 1 s; latência, buffer atual, `catchingUp`, taxa) e o `content.ts`
   desenha `#yte-live-status` **dentro do `#movie_player`** (canto superior
   direito, `pointer-events: none`) — visível também em **tela cheia**, ao
-  contrário do overlay do botão "Next video". Texto: `12.3s behind (buffer 5s)`
-  ou `... (real time)` e ` · 1.5x` enquanto acelera (em pt-BR: `12.3s atrás
-  (buffer 5s)` — textos do locale ativo, seção 5.8).
-  O badge some quando o status fica velho (>5 s sem publicação: recurso
-  desligado, saiu da live, VOD). Estilo em `skip-button.css` (id espelhado em
-  `LIVE_STATUS_ID` no `content.ts`).
-- **Diagnóstico (Debug ligado):** `live delay: catching up`
-  (`{ delaySeconds, bufferSeconds, rate }`), `live delay: catch-up finished`
-  (`{ delaySeconds, restoredRate }`) e **uma** linha por vídeo+motivo quando
-  não dá para medir (`cannot measure the live delay`).
-- **Limitações:** precisa que o player exponha `getProgressState()`; lives sem
-  DVR não têm atraso real para recuperar (o recurso fica inerte). Não muda a
-  latência de transmissão do streamer, só mantém o player na borda que o
-  YouTube entrega. Em aba oculta o Chrome throttla timers (~1×/min após um
-  tempo): a aceleração já ligada continua, só as decisões ficam mais espaçadas.
+  contrário do overlay do botão "Next video". Texto: `12.3s behind (buffer
+  4.2s)` e ` · 1.25x` enquanto acelera (em pt-BR: `12.3s atrás (buffer
+  4.2s)` — textos do locale ativo, seção 5.8). Sem latência mensurável:
+  `live (buffer Xs)`; sem buffer: `Xs behind`. O badge some quando o status
+  fica velho (> 5 s sem publicação: recurso desligado, saiu da live, VOD).
+  Estilo em `skip-button.css` (id espelhado em `LIVE_STATUS_ID` no
+  `content.ts`).
+- **Diagnóstico (Debug ligado):** uma linha por transição de comportamento
+  (`live delay: catching up` com `{rate, latencySeconds, bufferSeconds}`,
+  `catch-up resting`, `rebuilding the buffer`, `jumped to the live edge`) e
+  **uma** por vídeo+motivo quando não dá para medir (`cannot measure the live
+  latency`) ou quando a API de taxa não existe.
+- **Limitações:** precisa de `getStatsForNerds()` (sem ele a engine não age e o
+  badge mostra só o buffer). Não muda a latência de transmissão do streamer,
+  só mantém o player o mais perto possível da borda que o YouTube entrega.
 
 ---
 
@@ -504,13 +536,14 @@ reatividade é feita por `storage.onChanged`.
 | Auto-skip com atraso de 1,5s (`AUTO_SKIP_DELAY_MS`) em vez de instantâneo | O pulo instantâneo confundiria ("o vídeo mudou sozinho antes de eu ver"); com o atraso o botão aparece, o usuário entende e ainda pode clicar/pausar antes. Constante única para calibrar. |
 | Auto-skip **uma vez por vídeo** (`advanceHandledFor`) | Impede loop se o clique no próximo não navegar, evita pulsar de novo se o usuário voltar de propósito para o mesmo vídeo e ainda permite pular vários vídeos já assistidos em sequência (playlist). |
 | `skip.enabled`/`skip.autoSkip` como sub-opção desabilitada na UI | Coerência visual: com o toggle principal desligado, "Skip automatically" fica cinza (`Toggle` já suportava `disabled`; `className="sub"` só indenta). |
-| Delay de lives por **aceleração** (`player.setPlaybackRate`, 1.5x) até o alvo, não por seek | Escolha explícita do usuário: sem "teleporte" de conteúdo, a reprodução acelera até a borda como um ajuste de velocidade do próprio player. Trade-off: converge a 0,5 s/s (um atraso D além do alvo leva ~2×D s) e o badge mostra `1.5x` durante o catch-up. |
-| Buffer de live como **teto tolerado** com histerese: acelera em `buffer + 1,5 s`, para em `buffer + 0,5 s` | Evita liga/desliga da aceleração a cada oscilação; estar mais perto da borda que o buffer é bom e não deve gerar ação. As duas margens são constantes calibráveis (`LIVE_DELAY_TOLERANCE_S`/`LIVE_DELAY_STOP_MARGIN_S`). |
+| Delay de lives por **regulação do buffer** usando a aceleração do próprio player (`setPlaybackRate`, teto de 1.5x), como no **ZeroDelay** (repo de referência) | O `seekableEnd − current` fica ~0 mesmo 20 s atrás do tempo real; a parte recuperável é o **buffer baixado à frente do playhead** (`buffer_health_seconds`). Acelerar só o excedente do colchão, em bursts proporcionais, mantém a latência no chão sem "teleporte" de conteúdo; o badge mostra a velocidade ativa. |
+| Colchão de live **automático e adaptativo** (6 s inicial; +1 s após quase-travada, teto 9 s; cai até 4 s com a conexão folgada) e **sem opção na UI** | Pedido do usuário: remover o buffer configurável. É o modo padrão do ZeroDelay ("automatic"): a folga se ajusta à conexão sozinha, sem exigir que o usuário saiba o que é buffer. Constantes `LIVE_AUTO_*`. |
+| **Backstop** de borda com `seekToLiveHead()` aos 30 s de latência (`LIVE_SKIP_TO_LIVE_S`) | Pausa longa/reconexão deixariam um backlog que a aceleração levaria minutos para fechar (D s levam ~2×D s a 1,5x); o salto direto é o comportamento padrão do ZeroDelay. Re-arma quando a latência volta a < 15 s (`LIVE_SKIP_REARM_S`). |
 | Live delay **desligado por padrão** | Recursos que mexem na reprodução via APIs internas são opt-in no projeto (como resolução/legendas) — e ainda não houve QA manual em navegador real. |
-| Sincronia de live só com o player **playing** (state 1, sem `ad-showing`) | Nunca tirar o usuário de uma pausa nem competir com buffering/anúncio; a aceleração é desligada (e a velocidade restaurada) ao pausar e volta em ≤1 s ao dar play. |
+| Sincronia de live só com o player **playing** (state 1, sem `ad-showing`) | Nunca tirar o usuário de uma pausa nem competir com buffering/anúncio; a velocidade volta a 1x ao pausar e o catch-up reengata ao dar play. |
 | Indicador de delay **dentro do `#movie_player`** (não overlay da página) | Pedido do usuário para ver buffer e tempo atrás; dentro do player ele aparece também em **tela cheia** (onde o overlay do botão "Next video" não aparece). Dados via `{type:'live-status'}`; CSS no arquivo compartilhado e DOM no `content.ts`. |
 | i18n com **`chrome.i18n` nativo** (sem `@wxt-dev/i18n`) | Zero dependências novas e fallback automático: o Chrome resolve o idioma do navegador e usa `default_locale: "en"` no que faltar. O WXT já gera a **união tipada** das chaves a partir de `public/_locales/en/messages.json`, então não se perde a segurança de tipos. |
-| Textos como **chave** em constantes (`labelKey`/`hintKey` em `LIVE_DELAY_OPTIONS`/`QUALITY_LEVELS`) | O texto vive só nos messages.json; frase duplicada em constante + locale sairia de sincronia. Chave inexistente quebra o `npm run compile` (união `MessageKey`). |
+| Textos como **chave** em constantes (`labelKey` em `QUALITY_LEVELS`) | O texto vive só nos messages.json; frase duplicada em constante + locale sairia de sincronia. Chave inexistente quebra o `npm run compile` (união `MessageKey`). |
 | Nomes de idiomas de legenda via **`Intl.DisplayNames`** e datas via **`Intl.RelativeTimeFormat`** | 30 idiomas × 5 locales seriam centenas de strings para manter; o `Intl` resolve de graça e em **qualquer** idioma de navegador (não só nos 5). Os nomes em inglês de `CAPTION_LANGUAGES` viraram fallback. |
 | Frases da UI como **frase inteira com placeholders** (`$delay$`, `$buffer$`, `$count$`), não concatenação de pedaços | Ordem das palavras varia por idioma (russo: `отставание $delay$ с (буфер $buffer$ с)`). Plural: onde o inglês usava "(s)/x vezes", cada idioma usou construção neutra ("no total", "всего", "insgesamt"). |
 | Texto do badge montado no `content.ts` com `t()` a partir do payload | Os números continuam vindo do main world; ele não tem `chrome.*` nem textos de UI (seção 5.8). |
@@ -527,20 +560,21 @@ reatividade é feita por `storage.onChanged`.
 - Legenda ASR só existe se o YouTube tiver gerado para aquele vídeo; sem faixa
   alguma, nenhuma legenda é forçada.
 - Lives: a extensão reduz o delay **do player** (mantém a reprodução na borda
-  ao vivo dentro do buffer escolhido), não a latência de transmissão
-  (ingest/processamento do YouTube — no modo "normal latency" o delay real do
-  stream continua). Lives sem janela DVR não têm o que reposicionar (o recurso
-  não age).
-- O catch-up de lives usa APIs internas (`getProgressState()`,
-  `getPlayerState()`, `setPlaybackRate()`): se o YouTube mudar, o recurso para
-  de agir em silêncio (nada quebra). A aceleração leva tempo para convergir
-  (fecha 0,5 s por segundo; ~2×D s para um atraso D além do alvo) — foi escolha
-  do usuário em vez do "pulo" por seek. Com o recurso ligado, pausar/voltar no
-  DVR é recuperado quando a reprodução retoma — é o comportamento pretendido
-  ("sempre perto do ao vivo"); para assistir atrás, desligue o toggle.
-- Em aba oculta o Chrome throttla os timers: as verificações do delay de live
-  ficam mais espaçadas (a aceleração já ligada continua valendo), voltando ao
-  ritmo normal quando a aba fica visível.
+  que o YouTube entrega, consumindo o buffer excedente), não a latência de
+  transmissão (ingest/processamento do YouTube — pipelined ~5–8 s + colchão é
+  o piso real). Lives sem janela DVR não têm o que recuperar (o recurso fica
+  inerte).
+
+- O catch-up de lives usa APIs internas (`getStatsForNerds()`,
+  `getPlayerState()`, `setPlaybackRate()`, `seekToLiveHead()`): se o YouTube
+  mudar, o recurso para de agir em silêncio (nada quebra). A convergência é
+  proporcional (bursts de 1,05–1,5x); ficar mais de 30 s atrás (pausa longa,
+  reconexão) dispara o salto direto para a borda — comportamento do ZeroDelay
+  e documentado no hint da UI; para assistir atrás sem isso, desligue o toggle.
+- Em aba oculta o Chrome throttla os timers, mas os eventos `timeupdate` do
+  `<video>` continuam disparando: os ticks do delay de live seguem (~4/s) e a
+  convergência não para; só o `setInterval` de fallback (pausado) fica
+  espaçado.
 - O idioma da UI é o do **navegador**, fixado quando a extensão carrega: não há
   seletor próprio; trocar exige mudar o idioma do Chrome (ou do sistema) e
   reabrir popup/options/abas do YouTube. A lista é fechada (pt-BR, en, es, ru,
@@ -636,17 +670,29 @@ Checklist manual de QA (rodar antes de considerar uma mudança concluída):
       para a melhor abaixo).
 - [ ] Ativar legendas (ex.: Português) em vídeo com ASR em PT: legenda aparece
       ligada. Testar vídeo sem faixa PT (deve traduzir, se houver tradução).
-- [ ] Ligar **Reduce live delay** com buffer de 5 s numa live: o badge no canto
-      superior direito **do player** mostra o delay atualizando ~1×/s (en:
-      `X.Xs behind (buffer 5s)`; pt-BR: `X.Xs atrás (buffer 5s)`); pausar
-      ~1 min e voltar: a reprodução acelera (badge `· 1.5x`), converge para o
-      buffer e a velocidade volta a 1x (Debug mostra `live delay: catching up`
-      e `catch-up finished`).
+- [ ] Ligar **Reduce live delay** numa live: o badge no canto superior direito
+      **do player** mostra a latência e o buffer atualizando ~1×/s (en:
+      `X.Xs behind (buffer Y.Ys)`; pt-BR: `X.Xs atrás (buffer Y.Ys)`); se a
+      latência estiver acima do piso (~10 s+), a reprodução acelera
+      (badge `· 1.25x`), o buffer converge para o colchão automático
+      (~4–9 s) e a velocidade volta a 1x (Debug mostra
+      `live delay: catching up` e `catch-up resting`).
+- [ ] Numa live, pausar ~1 min e dar play: acima de 30 s de latência a
+      reprodução **salta direto** para a borda (Debug: `jumped to the live
+      edge`); abaixo disso, acelera e converge. Com poucos segundos atrás, o
+      badge mostra 1.0x (a latência se mantém sozinha até a próxima oscilação).
+- [ ] Com o catch-up ativo, mudar a velocidade manualmente no player (ex.:
+      1.5x): a extensão para de mexer na velocidade e **não** a restaura;
+      voltar para 1x devolve o controle à engine.
+- [ ] Com o badge visível, trocar para outra aba (vídeo tocando) e voltar após
+      ~1 min: a latência deve estar no piso (os ticks seguem via `timeupdate`)
+      ou foi fechada pelo backstop de 30 s.
 - [ ] Entrar em **tela cheia** com o badge visível (deve continuar aparecendo);
       trocar de vídeo/sair da live: o badge some em ≤5 s.
-- [ ] Buffer **Real time**: fica colado na borda (pode pausar/travar em conexão
-      instável — é o esperado). Com o toggle desligado e em VODs: nada acontece
-      (sem aceleração, sem badge, sem linha de ação no debug).
+- [ ] Desligar o toggle no meio de um catch-up: a velocidade volta a **1x** na
+      hora (Debug: `live delay: rate restored`). Com o toggle desligado e em
+      VODs: nada acontece (sem aceleração, sem badge, sem linha de ação no
+      debug).
 - [ ] **Idiomas**: com o Chrome em pt-BR (depois es, ru e de), popup, opções,
       botão, tooltip, badge e aviso de atualização aparecem no idioma do
       navegador, e `chrome://extensions` mostra a descrição traduzida. Com um
@@ -824,7 +870,7 @@ do bloqueador.
 
 ## 12. Estado atual
 
-- Versão: **0.8.0** (`package.json`), sem publicação na Chrome Web Store.
+- Versão: **0.9.0** (`package.json`), sem publicação na Chrome Web Store.
 - v0.2.0 (WXT + Vite + React + TypeScript) concluída e verificada; v0.3.0
   adicionou o botão "Next video"; v0.4.0 o tornou configurável com o
   "pular sozinho"; v0.4.1 tratou o "Extension context invalidated"; v0.5.0
@@ -836,17 +882,21 @@ do bloqueador.
   (1.5x) e adicionou o **indicador de delay dentro do player** (seção 5.7);
   v0.8.0 traduziu a interface (pt-BR, inglês, espanhol, russo e alemão) com
   `chrome.i18n` nativo, seguindo o idioma do navegador com fallback para inglês
-  (seção 5.8).
-- **Verificado em v0.8.0:** `npm run compile` limpo (chaves i18n tipadas pelo
-  WXT a partir do `en`); `npm run build` OK (`_locales/` com os 5 idiomas no
-  output, manifest com `default_locale: "en"`/`__MSG_extDescription__` na versão
-  0.8.0; `content.js` com `t()`; `main-world.js` sem `chrome.*`/i18n); os 5
-  `messages.json` checados por script (56 chaves idênticas, placeholders
+  (seção 5.8); v0.9.0 **reescreveu a engine do delay de lives** no desenho do
+  ZeroDelay (sinais `getStatsForNerds()`, regulação do buffer com colchão
+  automático, freio anti-travada, backstop `seekToLiveHead()` aos 30 s, ticks
+  por `timeupdate`) e **removeu a opção de buffer** da UI (colchão adaptativo).
+- **Verificado em v0.9.0:** `npm run compile` limpo; `npm run build` OK
+  (manifest 0.9.0; `main-world.js` com `getStatsForNerds`/`seekToLiveHead`/
+  `timeupdate`/`live_latency_secs`/`buffer_health_seconds` e sem `chrome.*`;
+  `content.js` com as chaves novas do badge e sem as removidas; chunks de
+  popup/options com `liveDelayHint` e sem o select de buffer); os 5
+  `messages.json` checados por script (46 chaves idênticas, placeholders
   declarados).
 - **Pendente: validação manual no YouTube** (checklist da seção 8 nunca foi
   executado em navegador real — inclui botão, auto-skip, fallback, logs de
-  estado, aviso de contexto inválido, o delay de lives com o badge e agora as
-  traduções nos 5 idiomas).
+  estado, aviso de contexto inválido, o recomputado delay de lives com o badge
+  e agora as traduções nos 5 idiomas).
 - A v0.1.0 (vanilla JS, sem build) foi substituída pela v0.2.0; o histórico
   está no registro abaixo.
 
@@ -856,6 +906,7 @@ do bloqueador.
 
 | Data | Versão | Mudança |
 | --- | --- | --- |
+| 2026-10-18 | 0.9.0 | **Delay de lives v3 (engine no desenho do ZeroDelay) + fim da opção de buffer.** Sinais corretos: `getStatsForNerds().live_latency_secs` (latência real; `seekableEnd − current` fica ~0 mesmo 20 s atrás) e `buffer_health_seconds` (mídia baixada à frente do playhead; fallback `video.buffered`); `live_latency_style` não vazio desativa a ação. Controlador novo em `main-world.content.ts`: EMAs de buffer/tendência, backoff instantâneo (dip ≤2,5 s, retoma ≥4 s), freio anti-travada (0,95x esmaecido por latência), histerese de engate, taxa proporcional `1 + 0,5×demanda×folga` (teto 1,5x) escrita na grade de 0,05 com adoção de mudança manual de velocidade e invariante de restauração para 1x fora do catch-up; colchão **automático** (6 s inicial, +1 s após quase-travada até 9 s, creep −0,01 s/tick até 4 s); backstop `player.seekToLiveHead()` + `playVideo()` aos 30 s de latência (re-arma <15 s). Loop `onLiveTick` com throttle de 200 ms alimentado por `timeupdate` (à prova do throttling de abas ocultas) + fallback de 1 s e tick imediato no `visibilitychange`; estado de controle zera por `video_id`. UI: select de buffer removido (`LIVE_DELAY_OPTIONS`/`LiveDelayBuffer`/`LiveDelayOption` deletados, `liveDelay: {enabled}`); hint novo `liveDelayHint` nos 5 locales; badge agora mostra `X.Xs behind (buffer Y.Ys)` (buffer real) com `· 1.25x` ativo, `live (buffer Y.Ys)` sem latência e `Xs behind` sem buffer (chaves `liveBadgeBehindNoBuffer`/`liveBadgeUnmeasured`; removidas `liveBadgeBehindRealTime`/`liveBadgeUnmeasuredRealTime`; 46 chaves × 5 locales). `LiveStatusMessage` com `latencySeconds`/`bufferSeconds` nullable (era `delaySeconds`/buffer da opção). Constantes `LIVE_*` substituídas no `constants.ts`; `package.json` 0.9.0. Verificado: compile limpo, build OK, grep no bundle, checker i18n OK. QA manual pendente. |
 | 2026-10-18 | 0.8.0 | **i18n da interface** (pt-BR, inglês, espanhol, russo e alemão) com `chrome.i18n` nativo, sem dependências novas: `public/_locales/<locale>/messages.json` (56 chaves cada; o `en` define a união tipada gerada pelo WXT em `.wxt/types/i18n.d.ts`), manifest com `default_locale: "en"` + `description: "__MSG_extDescription__"` (fallback automático para inglês no que não existir). Novo `src/shared/i18n.ts` (`t()`, `getUiLocale()`, `languageDisplayName()` via `Intl.DisplayNames`); todos os textos de popup/options/content traduzidos (`content.ts`: botão, tooltip, aviso de contexto e badge por mensagens com placeholders `$delay$`/`$buffer$`/`$percent$`); `LIVE_DELAY_OPTIONS`/`QUALITY_LEVELS` passaram a carregar `labelKey`/`hintKey` (tipos `LiveDelayOption`/`QualityLevelOption` atualizados); datas relativas com `Intl.RelativeTimeFormat` (fim do `'en'` fixo e do "just now" hardcoded); `<html lang>` e título da página de opções dinâmicos. Verificado: compile limpo, build OK (5 locales no output, manifest 0.8.0), consistência dos 5 arquivos checada por script (56 chaves, placeholders). QA manual pendente. |
 | 2026-10-18 | 0.7.0 | Delay de lives v2: catch-up por **aceleração do próprio player** (`setPlaybackRate(1.5)`, fallback `video.playbackRate`) em vez de seek, mantendo até `buffer + 0,5 s` e restaurando a velocidade anterior (e respeitando mudança manual do usuário); loop passou a 1 s. Novo **badge `#yte-live-status` dentro do `#movie_player`** (canto superior direito, visível também em tela cheia) com `X.Xs behind (buffer Ns) · 1.5x`, alimentado pela mensagem `{type:'live-status'}` publicada pelo main world (novo `LiveStatusMessage` em `messages.ts`); some após 5 s sem dados ou com o recurso desligado. `seekTo` removido do tipo do player; CSS do badge em `skip-button.css`; `content.ts` agora recebe mensagens do main world e desenha o badge. Verificado: type-check limpo, build OK, manifest 0.7.0. QA manual pendente. |
 | 2026-10-18 | 0.6.0 | Nova função **reduzir o delay de lives** (`settings.liveDelay`, default desligado, buffer default `2s`). No main world, `checkLiveDelay()` roda a cada 2 s e, em live reproduzindo, mede `seekableEnd − current` via `getProgressState()`; quando o delay passa de `buffer + 1,5 s`, chama `player.seekTo(seekableEnd − buffer)` (catch-up por seek, sem mudar a velocidade; pausado/buffering/anúncio nunca é tocado). Buffers: tempo real (0 s), 2 s, 5 s e 10 s, cada um com informativo de conexão no popup/options (`LIVE_DELAY_OPTIONS`). Campo aditivo (sem bump de `SCHEMA_VERSION`), `PlayerSettings`/`main-world` atualizados, card novo em `FeaturesSettings.tsx`, `package.json`/descrição/README/docs atualizados. Verificado: type-check limpo, build OK, manifest 0.6.0. QA manual pendente. |

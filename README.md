@@ -10,11 +10,14 @@ Extensão do Chrome (Manifest V3) que adiciona cinco recursos ao YouTube:
   priorizando a faixa gerada automaticamente (ASR) e caindo para tradução quando
   necessário.
 - **Reduzir o delay de lives** — mantém a transmissão ao vivo o mais perto
-  possível da borda, com buffer configurável de **tempo real, 2 s, 5 s ou 10 s**
-  (cada opção explica para qual tipo de conexão ela serve). Quando o atraso passa
-  do buffer, a reprodução acelera sozinha (1.5x) até voltar ao alvo, e um
-  indicador no player mostra o buffer e o tempo atrás da borda (visível também
-  em tela cheia). Só age em lives, e só enquanto o vídeo está rodando.
+  possível da borda *do player*, com um colchão de segurança **automático** que
+  se adapta à sua conexão (sem opção para configurar). Quando o atraso cresce, a
+  reprodução acelera sozinha (bursts de até 1.5x) só o suficiente para consumir
+  o buffer excedente, descansa em 1x e volta a 0.95x para reconstruir um colchão
+  fino; se ficar mais de 30 segundos atrás (pausa longa), salta direto para a
+  borda ao vivo. Um indicador no player mostra a latência e o buffer atual
+  (visível também em tela cheia). Só age em lives, e só enquanto o vídeo está
+  rodando.
 - **Pular vídeos já assistidos** — ao reabrir um vídeo que você já assistiu
   (≥ 90%), surge um botão **Próximo vídeo** (*Next video* em inglês) no canto
   inferior esquerdo da página (por cima de todo o conteúdo) que avança para o
@@ -53,8 +56,8 @@ Para carregar manualmente: `chrome://extensions` → **Modo do desenvolvedor** �
 ## Uso
 
 - **Popup** (ícone da extensão): ligar/desligar as funcionalidades configuráveis
-  e escolher resolução, idioma das legendas e o buffer das lives. Alterações
-  aplicam na hora, sem recarregar a página do YouTube.
+  e escolher resolução e idioma das legendas. Alterações aplicam na hora, sem
+  recarregar a página do YouTube.
 - **Página de opções** (botão `Configurações & assistidos` no popup): as mesmas
   configurações, log de depuração e o histórico de vídeos assistidos.
 - **Idiomas**: a interface segue o idioma do navegador — português (Brasil),
@@ -86,3 +89,6 @@ qualquer coisa.**
 - A extensão usa APIs internas do player do YouTube para resolução, legendas e
   o delay das lives; elas podem mudar sem aviso (o código é defensivo, mas pode
   quebrar eventualmente).
+- A lógica de redução do delay das lives foi inspirada no projeto
+  [ZeroDelay](https://github.com/joaogfc/ZeroDelay) (joaogfc), referência
+  validada em transmissões reais.
