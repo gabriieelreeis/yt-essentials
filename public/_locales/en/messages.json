@@ -6,6 +6,20 @@
   "watchedHint": {
     "message": "Stores title, channel, watched time, duration, percentage and dates for every video you watch. Everything stays in this browser."
   },
+  "historyImportHint": {
+    "message": "Mark the videos on this page as watched — including the ones from before the extension was installed."
+  },
+  "historyImportButton": { "message": "Import history" },
+  "historyImportRunning": {
+    "message": "Importing… $count$ videos found",
+    "placeholders": { "count": { "content": "$1" } }
+  },
+  "historyImportStop": { "message": "Stop" },
+  "historyImportDone": {
+    "message": "$found$ videos in the history · $added$ added to the watched list",
+    "placeholders": { "found": { "content": "$1" }, "added": { "content": "$2" } }
+  },
+  "historyImportDismiss": { "message": "Close" },
   "qualityToggle": { "message": "Force video resolution" },
   "qualityLabel": { "message": "Resolution" },
   "qualityAuto": { "message": "Auto" },

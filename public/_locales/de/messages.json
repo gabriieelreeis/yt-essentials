@@ -6,6 +6,20 @@
   "watchedHint": {
     "message": "Speichert Titel, Kanal, Sehzeit, Dauer, Prozentsatz und Datum für jedes gesehene Video. Alles bleibt in diesem Browser."
   },
+  "historyImportHint": {
+    "message": "Markiert die Videos dieser Seite als gesehen — auch die von vor der Installation der Erweiterung."
+  },
+  "historyImportButton": { "message": "Verlauf importieren" },
+  "historyImportRunning": {
+    "message": "Importiere… $count$ Videos gefunden",
+    "placeholders": { "count": { "content": "$1" } }
+  },
+  "historyImportStop": { "message": "Stopp" },
+  "historyImportDone": {
+    "message": "$found$ Videos im Verlauf · $added$ neu in der Liste",
+    "placeholders": { "found": { "content": "$1" }, "added": { "content": "$2" } }
+  },
+  "historyImportDismiss": { "message": "Schließen" },
   "qualityToggle": { "message": "Videoauflösung erzwingen" },
   "qualityLabel": { "message": "Auflösung" },
   "qualityAuto": { "message": "Automatisch" },

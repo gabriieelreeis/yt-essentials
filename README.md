@@ -4,6 +4,9 @@ Extensão do Chrome (Manifest V3) que adiciona cinco recursos ao YouTube:
 
 - **Salvar vídeos assistidos** — histórico local com título, canal, tempo assistido,
   porcentagem e datas (busca, remoção, limpeza e export JSON na página de opções).
+  Na página do histórico do YouTube (`youtube.com/feed/history`), um painel
+  **Importar histórico** traz os vídeos de lá — inclusive os assistidos antes de
+  instalar a extensão.
 - **Definir resolução automaticamente** — força a resolução escolhida em cada
   vídeo, com fallback inteligente quando a qualidade não existe no vídeo.
 - **Ativar legendas automaticamente** — liga a legenda no idioma escolhido,
@@ -56,8 +59,13 @@ Para carregar manualmente: `chrome://extensions` → **Modo do desenvolvedor** �
 ## Uso
 
 - **Popup** (ícone da extensão): ligar/desligar as funcionalidades configuráveis
-  e escolher resolução, idioma das legendas e o buffer das lives (1–10 s).
+  e escolher resolução, idioma das legendas e o colchão das lives (1–10 s).
   Alterações aplicam na hora, sem recarregar a página do YouTube.
+- **Importar o histórico do YouTube**: abra `youtube.com/feed/history` (logado).
+  Um painel no canto inferior esquerdo marca os vídeos listados como assistidos,
+  rolando a página sozinho para carregar mais — inclusive os de antes da
+  extensão. Dá para parar no meio; os registros que a extensão já tinha não são
+  alterados.
 - **Página de opções** (botão `Configurações & assistidos` no popup): as mesmas
   configurações, log de depuração e o histórico de vídeos assistidos.
 - **Idiomas**: a interface segue o idioma do navegador — português (Brasil),

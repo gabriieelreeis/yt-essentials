@@ -11,6 +11,8 @@
  *     already watched in a previous session (never on live streams).
  *  5. Draw the live-delay badge inside the player (data published by the MAIN
  *     world while the live-delay option is on).
+ *  6. Offer a one-click import of the watch-history page (/feed/history) into
+ *     the local watched list, covering videos watched before the extension.
  *
  * Quality/captions/live-delay control are intentionally NOT applied here:
  * page-defined methods of `#movie_player` are invisible from the isolated
@@ -22,9 +24,27 @@ import { ALREADY_WATCHED_PERCENT, DEFAULT_SETTINGS, STORAGE_KEYS } from '@/share
 import { t } from '@/shared/i18n';
 import { logger } from '@/shared/logger';
 import { MESSAGE_CHANNEL, readExtensionMessage, type AdvanceMessage, type SettingsMessage } from '@/shared/messages';
-import { deepMerge, getSettings, getWatchedVideos, upsertWatchedVideo } from '@/shared/storage';
-import type { DeepPartial, Settings, WatchedVideoInput, WatchedVideosMap } from '@/shared/types';
+import {
+  deepMerge,
+  getSettings,
+  getWatchedVideos,
+  importWatchedVideos,
+  upsertWatchedVideo
+} from '@/shared/storage';
+import type {
+  DeepPartial,
+  Settings,
+  WatchedVideoImport,
+  WatchedVideoInput,
+  WatchedVideosMap
+} from '@/shared/types';
 import { parseVideoIdFromUrl } from '@/shared/utils';
+import {
+  collectHistoryItems,
+  countHistoryCards,
+  isHistoryPage,
+  type HistoryItem
+} from '@/shared/youtube-history';
 import type { PlayerSettings } from '@/shared/youtube-player';
 import '@/shared/skip-button.css';
 import '@/shared/youtube-events';
@@ -42,6 +62,16 @@ const STALE_NOTICE_MS = 15000;
 const LIVE_STATUS_ID = 'yte-live-status';
 /** Hide the live-delay badge when the MAIN world stops publishing for this long. */
 const LIVE_STATUS_STALE_MS = 5000;
+/** Watch-history import panel; id must match skip-button.css. */
+const HISTORY_PANEL_ID = 'yte-history-import';
+/** Wait for a lazily-loaded batch after scrolling before counting an idle step. */
+const HISTORY_LOAD_TIMEOUT_MS = 3000;
+/** Poll cadence while waiting for a batch to arrive. */
+const HISTORY_POLL_MS = 250;
+/** Fruitless loads in a row before the crawl gives up (end of the list). */
+const HISTORY_IDLE_STEPS_MAX = 3;
+/** Safety cap on collected videos (storage still prunes to watched.maxEntries). */
+const HISTORY_IMPORT_MAX_ITEMS = 10000;
 
 interface WatchSession {
   videoId: string;
@@ -71,6 +101,20 @@ interface LiveStatusSnapshot {
   catchUpRate: number;
   /** When the snapshot arrived (used to drop stale data). */
   at: number;
+}
+
+/**
+ * Watch-history importer state (see updateHistoryPanel). One object for the
+ * whole page; the generation guard keeps a cancelled crawl from resuming when
+ * a new one is started while both are waiting on their own timers.
+ */
+interface HistoryImportState {
+  status: 'idle' | 'running' | 'done';
+  /** Video ids collected so far (dedupes across scroll batches). */
+  found: Set<string>;
+  /** Videos actually added to the stored watched list. */
+  added: number;
+  generation: number;
 }
 
 export default defineContentScript({
@@ -103,6 +147,16 @@ export default defineContentScript({
     /** Live-delay badge element inside the player, when shown. */
     let liveStatusBadge: HTMLDivElement | null = null;
     let lastHref = location.href;
+    /** History-import panel and crawl state (see updateHistoryPanel). */
+    let historyPanel: HTMLDivElement | null = null;
+    let historyPanelSignature = '';
+    let historyImportDismissed = false;
+    const historyImport: HistoryImportState = {
+      status: 'idle',
+      found: new Set(),
+      added: 0,
+      generation: 0
+    };
 
     void init();
 
@@ -205,6 +259,7 @@ export default defineContentScript({
     // -----------------------------------------------------------------------
 
     function handleNavigation(): void {
+      updateHistoryPanel();
       const videoId = parseVideoIdFromUrl(location.href);
       if (!videoId) {
         persistSession(session);
@@ -280,6 +335,7 @@ export default defineContentScript({
       updateSkipButton(skip);
       maybeAutoSkip(skip);
       updateLiveStatus();
+      updateHistoryPanel();
     }
 
     // -----------------------------------------------------------------------
@@ -498,6 +554,217 @@ export default defineContentScript({
       if (status.catchingUp) text += ` · ${status.catchUpRate.toFixed(2)}x`;
       if (badge.textContent !== text) badge.textContent = text;
       badge.classList.toggle('yte-catching-up', status.catchingUp);
+    }
+
+    // -----------------------------------------------------------------------
+    // Watch-history importer (youtube.com/feed/history)
+    // -----------------------------------------------------------------------
+
+    /**
+     * Small panel offered on the watch-history page that imports the videos
+     * listed there into the local watched list — including everything watched
+     * before the extension was installed. The page only renders batches as it
+     * scrolls, so while the import runs it drives the scroll itself and merges
+     * each batch as it appears. Existing records are never touched (see
+     * importWatchedVideos); imported dates and play counts are approximations.
+     * Runs from the tick loop, so the panel survives re-renders.
+     */
+    function updateHistoryPanel(): void {
+      const onHistory = isHistoryPage();
+      if (!onHistory || historyImportDismissed || !settings?.watched.enabled) {
+        removeHistoryPanel();
+        if (!onHistory) {
+          // Leaving the page cancels a running crawl and forgets the dismissal.
+          historyImportDismissed = false;
+          if (historyImport.status === 'running') historyImport.status = 'idle';
+        }
+        return;
+      }
+      if (!historyPanel || !historyPanel.isConnected) {
+        historyPanel = document.createElement('div');
+        historyPanel.id = HISTORY_PANEL_ID;
+        (document.body ?? document.documentElement).append(historyPanel);
+        historyPanelSignature = '';
+      }
+      renderHistoryPanel();
+    }
+
+    function removeHistoryPanel(): void {
+      historyPanel?.remove();
+      historyPanel = null;
+      historyPanelSignature = '';
+    }
+
+    /**
+     * Rebuilds the panel only when its visible content changed (signature
+     * check): the tick loop calls this every second while the page is open.
+     */
+    function renderHistoryPanel(): void {
+      const panel = historyPanel;
+      if (!panel) return;
+      const { status, found, added } = historyImport;
+      const signature = `${status}|${found.size}|${added}`;
+      if (signature === historyPanelSignature) return;
+      historyPanelSignature = signature;
+
+      const text = document.createElement('p');
+      text.className = 'yte-history-import-text';
+      const row = document.createElement('div');
+      row.className = 'yte-history-import-row';
+
+      if (status === 'running') {
+        text.textContent = t('historyImportRunning', [String(found.size)]);
+        row.append(createHistoryPanelButton(t('historyImportStop'), stopHistoryImport));
+      } else if (status === 'done') {
+        text.textContent = t('historyImportDone', [String(found.size), String(added)]);
+        row.append(
+          createHistoryPanelButton(t('historyImportDismiss'), dismissHistoryPanel, 'dismiss')
+        );
+      } else {
+        text.textContent = t('historyImportHint');
+        row.append(createHistoryPanelButton(t('historyImportButton'), startHistoryImport));
+        row.append(
+          createHistoryPanelButton(t('historyImportDismiss'), dismissHistoryPanel, 'dismiss')
+        );
+      }
+
+      panel.replaceChildren(text, row);
+    }
+
+    function createHistoryPanelButton(
+      label: string,
+      onClick: () => void,
+      variant?: string
+    ): HTMLButtonElement {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.textContent = label;
+      if (variant) button.classList.add(`yte-history-import-${variant}`);
+      // The page's own click handlers must not see this.
+      button.addEventListener('click', (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        event.stopImmediatePropagation();
+        onClick();
+      });
+      return button;
+    }
+
+    function startHistoryImport(): void {
+      if (historyImport.status === 'running') return;
+      historyImport.generation += 1;
+      historyImport.status = 'running';
+      historyImport.found = new Set();
+      historyImport.added = 0;
+      renderHistoryPanel();
+      void runHistoryImport(historyImport.generation);
+    }
+
+    function stopHistoryImport(): void {
+      if (historyImport.status !== 'running') return;
+      historyImport.status = 'done';
+      renderHistoryPanel();
+    }
+
+    function dismissHistoryPanel(): void {
+      historyImportDismissed = true;
+      if (historyImport.status === 'running') historyImport.status = 'done';
+      removeHistoryPanel();
+    }
+
+    /**
+     * Drives the import: each round merges what is rendered, scrolls to the
+     * bottom and waits for the next lazily-loaded batch. Gives up after a few
+     * fruitless loads (end of the list) or when the user stops it.
+     */
+    async function runHistoryImport(generation: number): Promise<void> {
+      let idleSteps = 0;
+      await importHistoryBatch();
+      while (isHistoryImportActive(generation)) {
+        if (historyImport.found.size >= HISTORY_IMPORT_MAX_ITEMS) break;
+        const before = countHistoryCards();
+        window.scrollTo(0, document.documentElement.scrollHeight);
+        const grew = await waitForHistoryGrowth(before, generation);
+        if (!isHistoryImportActive(generation)) break;
+        const collected = await importHistoryBatch();
+        idleSteps = grew || collected ? 0 : idleSteps + 1;
+        if (idleSteps >= HISTORY_IDLE_STEPS_MAX) break;
+      }
+      if (isHistoryImportActive(generation)) {
+        historyImport.status = 'done';
+        renderHistoryPanel();
+        logger.debug('history import finished', {
+          found: historyImport.found.size,
+          added: historyImport.added
+        });
+      }
+    }
+
+    function isHistoryImportActive(generation: number): boolean {
+      return historyImport.status === 'running' && historyImport.generation === generation;
+    }
+
+    /** Collects the cards currently rendered and merges the new ones. */
+    async function importHistoryBatch(): Promise<boolean> {
+      const fresh: HistoryItem[] = [];
+      for (const item of collectHistoryItems()) {
+        if (historyImport.found.has(item.id)) continue;
+        historyImport.found.add(item.id);
+        fresh.push(item);
+      }
+      if (fresh.length === 0) return false;
+      renderHistoryPanel();
+
+      try {
+        const added = await importWatchedVideos(fresh.map(toImportRecord), {
+          maxEntries: settings?.watched.maxEntries
+        });
+        historyImport.added += added;
+        logger.debug('history import batch merged', {
+          batch: fresh.length,
+          found: historyImport.found.size,
+          added: historyImport.added
+        });
+      } catch (error) {
+        if (isExtensionAlive()) logger.warn('could not import the watch history', error);
+        historyImport.status = 'done';
+      }
+      renderHistoryPanel();
+      return true;
+    }
+
+    /** Maps a scraped card onto the storage import shape. */
+    function toImportRecord(item: HistoryItem): WatchedVideoImport {
+      return {
+        id: item.id,
+        title: item.title,
+        channel: item.channel,
+        duration: item.durationSeconds,
+        percent: item.percent,
+        firstWatchedAt: item.watchedAt,
+        lastWatchedAt: item.watchedAt,
+        playCount: 1
+      };
+    }
+
+    /**
+     * Waits for the next lazily-loaded batch (the card count grows). False
+     * when nothing new appears within the timeout, or when the crawl stopped.
+     */
+    async function waitForHistoryGrowth(previousCount: number, generation: number): Promise<boolean> {
+      const deadline = Date.now() + HISTORY_LOAD_TIMEOUT_MS;
+      while (Date.now() < deadline) {
+        await sleep(HISTORY_POLL_MS);
+        if (!isHistoryImportActive(generation)) return false;
+        if (countHistoryCards() > previousCount) return true;
+      }
+      return countHistoryCards() > previousCount;
+    }
+
+    function sleep(ms: number): Promise<void> {
+      return new Promise((resolve) => {
+        ctx.setTimeout(() => resolve(), ms);
+      });
     }
 
     // -----------------------------------------------------------------------

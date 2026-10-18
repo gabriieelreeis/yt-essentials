@@ -5,13 +5,16 @@
  *    already watched in a previous session (never on live streams);
  *  - #yte-live-status   badge inside the player with the live buffer and how
  *    far behind the live edge playback is (live-delay feature);
+ *  - #yte-history-import  panel on the watch-history page (/feed/history) that
+ *    imports previously watched videos into the local watched list;
  *  - #yte-stale-notice  warning shown when the extension was reloaded/updated
  *    with the tab open (stale content script).
  *
- * #yte-skip-button and #yte-stale-notice are page-level overlays (fixed to the
- * viewport); #yte-live-status lives inside #movie_player so it is visible in
- * fullscreen too. The ids below are mirrored by SKIP_BUTTON_ID / LIVE_STATUS_ID
- * / STALE_NOTICE_ID in content.ts.
+ * #yte-skip-button, #yte-history-import and #yte-stale-notice are page-level
+ * overlays (fixed to the viewport); #yte-live-status lives inside #movie_player
+ * so it is visible in fullscreen too. The ids below are mirrored by
+ * SKIP_BUTTON_ID / LIVE_STATUS_ID / HISTORY_PANEL_ID / STALE_NOTICE_ID in
+ * content.ts.
  */
 
 #yte-skip-button {
@@ -78,4 +81,55 @@
   /* Informational only: must never steal a click from the page. */
   pointer-events: none;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+}
+
+#yte-history-import {
+  position: fixed;
+  left: 12px;
+  bottom: 12px;
+  z-index: 2147483647;
+  box-sizing: border-box;
+  width: 264px;
+  padding: 10px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 12px;
+  background: rgba(15, 15, 15, 0.92);
+  color: #fff;
+  font: 400 12px/1.45 Roboto, Arial, sans-serif;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+}
+
+#yte-history-import .yte-history-import-text {
+  margin: 0 0 8px;
+}
+
+#yte-history-import .yte-history-import-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+#yte-history-import button {
+  margin: 0;
+  padding: 5px 10px;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 999px;
+  background: transparent;
+  color: #fff;
+  font: 500 12px/1 Roboto, Arial, sans-serif;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+#yte-history-import button:hover {
+  background: rgba(255, 0, 0, 0.92);
+}
+
+#yte-history-import button:focus-visible {
+  outline: 2px solid #fff;
+  outline-offset: 2px;
+}
+
+#yte-history-import button.yte-history-import-dismiss {
+  margin-left: auto;
 }

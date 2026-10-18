@@ -6,6 +6,20 @@
   "watchedHint": {
     "message": "Хранит название, канал, время просмотра, длительность, процент и даты для каждого просмотренного видео. Всё остаётся в этом браузере."
   },
+  "historyImportHint": {
+    "message": "Отметить видео с этой страницы как просмотренные — в том числе до установки расширения."
+  },
+  "historyImportButton": { "message": "Импортировать историю" },
+  "historyImportRunning": {
+    "message": "Импорт… найдено видео: $count$",
+    "placeholders": { "count": { "content": "$1" } }
+  },
+  "historyImportStop": { "message": "Остановить" },
+  "historyImportDone": {
+    "message": "Видео в истории: $found$ · добавлено в список: $added$",
+    "placeholders": { "found": { "content": "$1" }, "added": { "content": "$2" } }
+  },
+  "historyImportDismiss": { "message": "Закрыть" },
   "qualityToggle": { "message": "Всегда задавать разрешение видео" },
   "qualityLabel": { "message": "Разрешение" },
   "qualityAuto": { "message": "Автоматически" },

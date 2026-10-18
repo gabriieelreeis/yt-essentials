@@ -19,13 +19,15 @@ YouTube pendente).
 acontece no YouTube e melhora a experiência do usuário. Repositório:
 `yt-essentials`.
 
-Escopo da v0.8.0 (exatamente estas cinco funcionalidades, nada mais — a
-interface é traduzida, seção 5.8):
+Escopo (exatamente estas cinco funcionalidades, nada mais — a interface é
+traduzida, seção 5.8):
 
 1. **Salvar vídeos assistidos** — grava localmente título, canal, tempo assistido,
    duração, porcentagem, contagem de reproduções e datas de cada vídeo assistido.
    A página de opções lista o histórico com busca, remoção individual, limpeza
-   total e exportação em JSON.
+   total e exportação em JSON. Na página do histórico do YouTube
+   (`youtube.com/feed/history`) um painel importa tudo o que já está lá —
+   inclusive vídeos de antes de instalar a extensão (seção 5.9).
 2. **Definir resolução automaticamente** — força a resolução escolhida pelo
    usuário em cada vídeo. Se o vídeo não oferecer aquela qualidade, usa a melhor
    qualidade disponível *abaixo* da escolhida.
@@ -163,7 +165,7 @@ Adicionar um campo em `DEFAULT_SETTINGS` (`src/shared/constants.ts`) + no tipo
   "watched":  { "enabled": true, "minSeconds": 5, "maxEntries": 2000 },
   "quality":  { "enabled": false, "value": "hd1080" },
   "captions": { "enabled": false, "language": "en" },
-  "liveDelay": { "enabled": false },
+  "liveDelay": { "enabled": false, "cushionSeconds": 5 },
   "skip":     { "enabled": true, "autoSkip": false }
 }
 ```
@@ -200,6 +202,9 @@ Regras de negócio embutidas em `storage.upsertWatchedVideo()`:
   cliques acidentais.
 - Ao passar de `watched.maxEntries` (2000), os registros mais antigos por
   `lastWatchedAt` são podados.
+- `storage.importWatchedVideos()` (importação do histórico, seção 5.9) só
+  **adiciona** vídeos ausentes: registro existente nunca é sobrescrito (os dados
+  exatos da extensão vencem). Datas/`playCount` importados são aproximados.
 - `storage.getWatchedVideos()` aceita array legado e converte para mapa
   (migração defensiva).
 
@@ -478,7 +483,7 @@ usuário** (o modo "Personalizado" da referência).
 
 ### 5.8 Fluxo: i18n da interface (chrome.i18n nativo)
 
-- **Idiomas:** `pt_BR`, `en`, `es`, `ru`, `de` — 56 chaves por idioma, todas
+- **Idiomas:** `pt_BR`, `en`, `es`, `ru`, `de` — 54 chaves por idioma, todas
   completas. O idioma vem do **navegador** (não há seletor na UI); qualquer
   outro idioma cai em inglês (`default_locale: "en"` no manifest). pt-PT pode
   receber pt-BR ou inglês (decisão do Chrome).
@@ -510,6 +515,43 @@ usuário** (o modo "Personalizado" da referência).
 - **Adicionar idioma novo:** criar `public/_locales/<novo>/messages.json`
   copiando o `en` com todas as chaves, traduzir e rebuildar. Nenhum código
   muda (o tipo gerado só olha o `en`).
+
+---
+
+### 5.9 Fluxo: importação do histórico do YouTube (content.ts)
+
+Na página `youtube.com/feed/history` aparece um painel flutuante (canto inferior
+esquerdo, `#yte-history-import`, estilo em `skip-button.css`) com **Importar
+histórico**: lê os cards já renderizados e marca todos como assistidos —
+inclusive os de antes de a extensão existir. O painel só aparece com
+`watched.enabled` ligado e desaparece ao sair da página (que também cancela uma
+importação em andamento).
+
+1. A leitura do DOM vive em `src/shared/youtube-history.ts` (isolated world):
+   `isHistoryPage()` reconhece a página; `collectHistoryItems()` percorre os
+   `ytd-video-renderer` e extrai id (href `/watch?v=`), título, canal, duração
+   (badge de relógio) e o **percentual assistido** da barra de progresso do card
+   (`ytd-thumbnail-overlay-resume-playback-renderer #progress`, `width: N%` no
+   inline style; sem barra → 0%). Cards já parseados ficam em cache por elemento
+   (`WeakMap`, revalidado pelo href) para a rolagem longa não reprocessar tudo.
+2. A data é **aproximada por dia**: "hoje"/"ontem" reconhecidos nos 5 idiomas da
+   UI, datas completas via `Date.parse()` quando o idioma permite e, no resto, um
+   dia por seção (as seções são cronológicas). Serve para ordenar a lista e
+   podar; não há hora exata, e `playCount` importado fica 1.
+3. A página só carrega os lotes conforme rola, então a importação **dirige a
+   rolagem**: a cada rodada mescla o lote atual via
+   `storage.importWatchedVideos()` (só adiciona; registro existente nunca é
+   tocado), rola até o fim e espera o próximo lote (poll de 250 ms, timeout de
+   3 s por lote; 3 rodadas sem conteúdo novo encerram — fim da lista). Botões
+   **Parar** (durante) e **Fechar** (depois); o resumo mostra quantos vídeos o
+   histórico tinha e quantos entraram na lista.
+4. Teto de segurança de 10.000 itens coletados (`HISTORY_IMPORT_MAX_ITEMS`); o
+   armazenamento continua podando no `watched.maxEntries` (2000). Como os
+   importados têm as datas mais antigas, a poda os remove primeiro quando o
+   limite aperta.
+5. Shorts (outro card) e playlists ficam de fora; vídeos apagados/privados nem
+   aparecem na página. Histórico pausado/expirado na conta → simplesmente há
+   menos (ou nada) para importar.
 
 ---
 
@@ -551,6 +593,7 @@ usuário** (o modo "Personalizado" da referência).
 | Nomes de idiomas de legenda via **`Intl.DisplayNames`** e datas via **`Intl.RelativeTimeFormat`** | 30 idiomas × 5 locales seriam centenas de strings para manter; o `Intl` resolve de graça e em **qualquer** idioma de navegador (não só nos 5). Os nomes em inglês de `CAPTION_LANGUAGES` viraram fallback. |
 | Frases da UI como **frase inteira com placeholders** (`$delay$`, `$buffer$`, `$seconds$`, `$count$`), não concatenação de pedaços | Ordem das palavras varia por idioma (russo: `отставание $delay$ с (буфер $buffer$ с)`). Plural: onde o inglês usava "(s)/x vezes", cada idioma usou construção neutra ("no total", "всего", "insgesamt"). |
 | Texto do badge montado no `content.ts` com `t()` a partir do payload | Os números continuam vindo do main world; ele não tem `chrome.*` nem textos de UI (seção 5.8). |
+| Importar o histórico do YouTube **lendo a própria página** (`/feed/history`) em vez de API ou Google Takeout | O content script já roda em `youtube.com`: nenhuma permissão nova, nenhuma requisição de rede (o projeto continua sem chamadas próprias ao Google) e o usuário não precisa exportar arquivo nenhum. Trade-offs assumidos com o usuário: só o que a página carregar (rolagem automática com opção de parar), datas por **dia** (sem hora), `playCount` = 1 e ausência de barra de progresso = 0% (aparece na lista, mas não aciona o botão "Next video"). Registros já existentes nunca são sobrescritos. |
 
 ---
 
@@ -614,6 +657,18 @@ usuário** (o modo "Personalizado" da referência).
 - Histórico e decisão de pular usam o `watchedVideos` local: vídeo assistido em
   outro navegador/dispositivo não conta (não há sync).
 - Título/canal podem vir vazios em Shorts; o registro ainda é salvo com o id.
+- A importação do histórico (seção 5.9) depende dos **seletores internos** da
+  página (`ytd-video-renderer`, barra de progresso do card): mudança de layout
+  faz a importação ler menos itens (nunca quebrar). Datas são **aproximadas por
+  dia** (hoje/ontem/data quando o idioma permite; senão um dia por seção),
+  `playCount` fica 1 e vídeos sem barra de progresso entram com 0% (aparecem na
+  lista, mas não mostram o botão "Next video").
+- Histórico pausado/expirado na conta ou navegação deslogada: a página mostra
+  menos (ou nada) e a importação importa o que existir. Shorts usam outro card e
+  ficam de fora; vídeos apagados/privados não aparecem.
+- Com o limite de `watched.maxEntries` (2000) já cheio, a poda remove os
+  registros importados mais antigos primeiro (as datas aproximadas são as mais
+  antigas da lista).
 - **`.output/` é gerado** — nunca editar ali nem commitar; para testar uma
   mudança é preciso rodar `npm run build` de novo e recarregar a extensão.
 - **"Extension context invalidated"** — erro esperado quando a extensão é
@@ -669,6 +724,13 @@ Checklist manual de QA (rodar antes de considerar uma mudança concluída):
       progresso e data; `playCount` = 1.
 - [ ] Navegar para outro vídeo sem reload: novo registro; `playCount` do anterior
       continua 1.
+- [ ] Abrir `https://www.youtube.com/feed/history` (logado): o painel **Importar
+      histórico** aparece no canto inferior esquerdo; clicar importa em lotes (a
+      página rola sozinha; a contagem sobe), o **Parar** interrompe e o resumo
+      mostra encontrados/adicionados. Conferir na página de opções que os vídeos
+      entraram (título, canal, data aproximada) sem sobrescrever registros já
+      existentes. Reabrir vídeos importados: os com barra ≥ 90% mostram
+      **Próximo vídeo**; os sem barra (0%) não mostram.
 - [ ] Ativar resolução 720p e abrir um vídeo 1080p+: o menu de qualidade do
       YouTube mostra 720p. Testar também um vídeo que não tem 720p (deve cair
       para a melhor abaixo).
@@ -875,7 +937,7 @@ do bloqueador.
 
 ## 12. Estado atual
 
-- Versão: **0.9.1** (`package.json`), sem publicação na Chrome Web Store.
+- Versão: **0.10.0** (`package.json`), sem publicação na Chrome Web Store.
 - v0.2.0 (WXT + Vite + React + TypeScript) concluída e verificada; v0.3.0
   adicionou o botão "Next video"; v0.4.0 o tornou configurável com o
   "pular sozinho"; v0.4.1 tratou o "Extension context invalidated"; v0.5.0
@@ -893,17 +955,21 @@ do bloqueador.
   removeu a opção de buffer da UI (colchão adaptativo); v0.9.1 **devolveu o
   colchão à UI** como slider de 1–10 s e trocou o controle pelo desenho do modo
   "Personalizado" do ZeroDelay (regulação direta em torno do alvo escolhido,
-  desaceleração a 0,90x para recompor).
-- **Verificado em v0.9.1:** `npm run compile` limpo; `npm run build` OK
-  (manifest 0.9.1; `main-world.js` com `getStatsForNerds`/`seekToLiveHead`/
-  `timeupdate`/`live_latency_secs`/`buffer_health_seconds` e sem `chrome.*`;
-  chunks de popup/options com `liveDelayCushionLabel`/`liveDelayCushionValue` e
-  o slider, sem as constantes antigas); os 5 `messages.json` checados por
-  script (48 chaves idênticas, placeholders declarados).
+  desaceleração a 0,90x para recompor); v0.10.0 adicionou a **importação do
+  histórico do YouTube** na própria página `/feed/history` (painel com rolagem
+  automática que marca como assistidos os vídeos de antes da extensão; seção 5.9).
+- **Verificado em v0.10.0:** `npm run compile` limpo; `npm run build` OK
+  (manifest 0.10.0; `content.js` com o painel `yte-history-import`, os seletores
+  do histórico (`ytd-video-renderer`, `resume-playback`) e as chaves
+  `historyImport*`; `content.css` com o estilo do painel; `main-world.js` segue
+  sem `chrome.*` e com `getStatsForNerds`/`seekToLiveHead`/`timeupdate` como na
+  v0.9.1); os 5 `messages.json` checados por script (54 chaves idênticas,
+  placeholders declarados).
 - **Pendente: validação manual no YouTube** (checklist da seção 8 nunca foi
   executado em navegador real — inclui botão, auto-skip, fallback, logs de
-  estado, aviso de contexto inválido, o recomputado delay de lives (badge +
-  slider de colchão) e as traduções nos 5 idiomas).
+  estado, aviso de contexto inválido, o delay de lives (badge + slider de
+  colchão), a **importação do histórico** (seletores e rolagem reais, painel
+  nos 5 idiomas) e as traduções).
 - A v0.1.0 (vanilla JS, sem build) foi substituída pela v0.2.0; o histórico
   está no registro abaixo.
 
@@ -913,6 +979,7 @@ do bloqueador.
 
 | Data | Versão | Mudança |
 | --- | --- | --- |
+| 2026-10-18 | 0.10.0 | **Importação do histórico do YouTube (`/feed/history`).** Painel flutuante (`#yte-history-import`, estilo em `skip-button.css`) com botão "Importar histórico": lê os cards do histórico (`src/shared/youtube-history.ts`; id via href `/watch?v=`, título, canal, duração do badge e percentual da barra de progresso, com cache por elemento revalidado pelo href) e mescla em lotes via `storage.importWatchedVideos()` — só adiciona vídeos ausentes, registro existente nunca é sobrescrito. A importação dirige a rolagem (poll de 250 ms, timeout de 3 s por lote, 3 rodadas ociosas encerram; teto de 10.000 itens), com Parar/Fechar e resumo encontrados/adicionados. Datas aproximadas por dia ("hoje"/"ontem" nos 5 idiomas; `Date.parse` quando dá; senão um dia por seção), `playCount` = 1, sem barra de progresso = 0% (não aciona o botão "Next video"). Novo tipo `WatchedVideoImport`; 6 chaves `historyImport*` nos locales (54 chaves × 5); `package.json` 0.10.0. Verificado: compile limpo, build OK, greps no bundle, checker i18n OK. QA manual pendente. |
 | 2026-10-18 | 0.9.1 | **Colchão do delay de lives escolhido pelo usuário (slider 1–10 s).** `liveDelay.cushionSeconds` (default 5, passo 0,5) com slider no card do recurso (popup/options), preso à faixa em `readCushionSeconds()`. A regulação adaptativa deu lugar ao desenho do modo "Personalizado" do ZeroDelay (`createBandController`): EMA do buffer (0,9/0,1); excedente → `1 + 0,08×excedente` (teto 1,5x); déficit → `1 − 0,15×déficit` (piso 0,90x) esmaecido pela latência (22 s em 6 s). Removidos histerese, backoff, stall floor, freio por tendência e colchão automático (`LIVE_AUTO_*`/`LIVE_BRAKE_*`/`LIVE_BUFFER_*`/`LIVE_ENGAGE_*`/`LIVE_MIN_LATENCY*`/`LIVE_DRAIN_*` → `LIVE_CUSHION_*`/`LIVE_REGULATE_*`/`LIVE_REBUILD_FLOOR_RATE`/`LIVE_DRIFT_*`). Badge, backstop de 30 s, ticks, adoção de velocidade manual e invariante de restauração inalterados. Locales: `liveDelayCushionLabel`/`liveDelayCushionValue` + revisão do `liveDelayHint` (48 chaves × 5). `package.json` 0.9.1. Verificado: compile limpo, build OK, greps no bundle, checker i18n OK. QA manual pendente. |
 | 2026-10-18 | 0.9.0 | **Delay de lives v3 (engine no desenho do ZeroDelay) + fim da opção de buffer.** Sinais corretos: `getStatsForNerds().live_latency_secs` (latência real; `seekableEnd − current` fica ~0 mesmo 20 s atrás) e `buffer_health_seconds` (mídia baixada à frente do playhead; fallback `video.buffered`); `live_latency_style` não vazio desativa a ação. Controlador novo em `main-world.content.ts`: EMAs de buffer/tendência, backoff instantâneo (dip ≤2,5 s, retoma ≥4 s), freio anti-travada (0,95x esmaecido por latência), histerese de engate, taxa proporcional `1 + 0,5×demanda×folga` (teto 1,5x) escrita na grade de 0,05 com adoção de mudança manual de velocidade e invariante de restauração para 1x fora do catch-up; colchão **automático** (6 s inicial, +1 s após quase-travada até 9 s, creep −0,01 s/tick até 4 s); backstop `player.seekToLiveHead()` + `playVideo()` aos 30 s de latência (re-arma <15 s). Loop `onLiveTick` com throttle de 200 ms alimentado por `timeupdate` (à prova do throttling de abas ocultas) + fallback de 1 s e tick imediato no `visibilitychange`; estado de controle zera por `video_id`. UI: select de buffer removido (`LIVE_DELAY_OPTIONS`/`LiveDelayBuffer`/`LiveDelayOption` deletados, `liveDelay: {enabled}`); hint novo `liveDelayHint` nos 5 locales; badge agora mostra `X.Xs behind (buffer Y.Ys)` (buffer real) com `· 1.25x` ativo, `live (buffer Y.Ys)` sem latência e `Xs behind` sem buffer (chaves `liveBadgeBehindNoBuffer`/`liveBadgeUnmeasured`; removidas `liveBadgeBehindRealTime`/`liveBadgeUnmeasuredRealTime`; 46 chaves × 5 locales). `LiveStatusMessage` com `latencySeconds`/`bufferSeconds` nullable (era `delaySeconds`/buffer da opção). Constantes `LIVE_*` substituídas no `constants.ts`; `package.json` 0.9.0. Verificado: compile limpo, build OK, grep no bundle, checker i18n OK. QA manual pendente. |
 | 2026-10-18 | 0.8.0 | **i18n da interface** (pt-BR, inglês, espanhol, russo e alemão) com `chrome.i18n` nativo, sem dependências novas: `public/_locales/<locale>/messages.json` (56 chaves cada; o `en` define a união tipada gerada pelo WXT em `.wxt/types/i18n.d.ts`), manifest com `default_locale: "en"` + `description: "__MSG_extDescription__"` (fallback automático para inglês no que não existir). Novo `src/shared/i18n.ts` (`t()`, `getUiLocale()`, `languageDisplayName()` via `Intl.DisplayNames`); todos os textos de popup/options/content traduzidos (`content.ts`: botão, tooltip, aviso de contexto e badge por mensagens com placeholders `$delay$`/`$buffer$`/`$percent$`); `LIVE_DELAY_OPTIONS`/`QUALITY_LEVELS` passaram a carregar `labelKey`/`hintKey` (tipos `LiveDelayOption`/`QualityLevelOption` atualizados); datas relativas com `Intl.RelativeTimeFormat` (fim do `'en'` fixo e do "just now" hardcoded); `<html lang>` e título da página de opções dinâmicos. Verificado: compile limpo, build OK (5 locales no output, manifest 0.8.0), consistência dos 5 arquivos checada por script (56 chaves, placeholders). QA manual pendente. |

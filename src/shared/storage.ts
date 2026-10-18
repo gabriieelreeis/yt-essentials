@@ -14,6 +14,7 @@ import { DEFAULT_SETTINGS, SCHEMA_VERSION, STORAGE_KEYS } from './constants';
 import type {
   DeepPartial,
   Settings,
+  WatchedVideoImport,
   WatchedVideoInput,
   WatchedVideoRecord,
   WatchedVideosMap
@@ -132,6 +133,49 @@ export async function upsertWatchedVideo(
   pruneWatchedMap(map, maxEntries);
   await chrome.storage.local.set({ [STORAGE_KEYS.watchedVideos]: map });
   return merged;
+}
+
+/**
+ * Bulk-imports records scraped from the watch-history page (see
+ * youtube-history.ts). Existing records are never touched: the extension's own
+ * data is exact, while the import's dates and play counts are approximations.
+ * Only videos that were not recorded yet are added.
+ *
+ * @returns how many videos were actually added.
+ */
+export async function importWatchedVideos(
+  records: WatchedVideoImport[],
+  options: UpsertOptions = {}
+): Promise<number> {
+  const map = await getWatchedVideos();
+  let added = 0;
+  for (const record of records) {
+    if (!record?.id || map[record.id]) continue;
+    const duration = Math.max(0, Math.round(Number(record.duration) || 0));
+    const percent = clamp(Math.round(Number(record.percent) || 0), 0, 100);
+    const importedAt =
+      Number.isFinite(record.lastWatchedAt) && record.lastWatchedAt > 0
+        ? record.lastWatchedAt
+        : Date.now();
+    map[record.id] = {
+      id: record.id,
+      title: record.title ?? '',
+      channel: record.channel ?? '',
+      url: `https://www.youtube.com/watch?v=${record.id}`,
+      duration,
+      watchedSeconds: Math.round((duration * percent) / 100),
+      percent,
+      firstWatchedAt: Number.isFinite(record.firstWatchedAt) ? record.firstWatchedAt : importedAt,
+      lastWatchedAt: importedAt,
+      playCount: Math.max(1, Math.round(Number(record.playCount) || 1))
+    };
+    added += 1;
+  }
+  if (added > 0) {
+    pruneWatchedMap(map, options.maxEntries);
+    await chrome.storage.local.set({ [STORAGE_KEYS.watchedVideos]: map });
+  }
+  return added;
 }
 
 export async function removeWatchedVideo(id: string): Promise<void> {

@@ -99,6 +99,24 @@ export interface WatchedVideoInput {
   watchedSeconds?: number;
 }
 
+/**
+ * One entry produced by the watch-history importer (youtube.com/feed/history,
+ * see youtube-history.ts). Dates and play counts are approximations read from
+ * the page: only used when the video was never recorded by the extension.
+ */
+export interface WatchedVideoImport {
+  id: string;
+  title: string;
+  channel: string;
+  /** Duration in seconds (0 when the card had no clock badge, e.g. a live). */
+  duration: number;
+  /** Watched percentage from the history progress bar (0 when absent). */
+  percent: number;
+  firstWatchedAt: number;
+  lastWatchedAt: number;
+  playCount: number;
+}
+
 export type DeepPartial<T> = {
   [K in keyof T]?: T[K] extends object ? DeepPartial<T[K]> : T[K];
 };

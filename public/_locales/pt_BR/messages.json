@@ -6,6 +6,20 @@
   "watchedHint": {
     "message": "Guarda título, canal, tempo assistido, duração, porcentagem e datas de cada vídeo que você assiste. Tudo fica neste navegador."
   },
+  "historyImportHint": {
+    "message": "Marque os vídeos desta página como assistidos — inclusive os de antes de instalar a extensão."
+  },
+  "historyImportButton": { "message": "Importar histórico" },
+  "historyImportRunning": {
+    "message": "Importando… $count$ vídeos encontrados",
+    "placeholders": { "count": { "content": "$1" } }
+  },
+  "historyImportStop": { "message": "Parar" },
+  "historyImportDone": {
+    "message": "$found$ vídeos no histórico · $added$ novos na lista",
+    "placeholders": { "found": { "content": "$1" }, "added": { "content": "$2" } }
+  },
+  "historyImportDismiss": { "message": "Fechar" },
   "qualityToggle": { "message": "Forçar resolução do vídeo" },
   "qualityLabel": { "message": "Resolução" },
   "qualityAuto": { "message": "Automática" },
